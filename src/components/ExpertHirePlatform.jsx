@@ -60,24 +60,26 @@ export const ExpertHirePlatform = () => {
   const [appliedSuccess, setAppliedSuccess] = useState(false);
   const [appliedCandidateName, setAppliedCandidateName] = useState("");
 
-  // Direct Application Form State
-  const [applyForm, setApplyForm] = useState({
-    name: "Siddharth Mathur",
-    email: "siddharth.mathur@gmail.com",
-    phone: "+91 98201 44821",
-    location: "Bengaluru, Karnataka",
-    experience: "6 years",
-    currentCompany: "Swiggy - Senior Backend Engineer",
-    currentCtc: "₹28 LPA",
-    expectedCtc: "₹42 LPA",
+  // Direct Application Form State (starts empty for candidate input)
+  const emptyApplyForm = {
+    name: "",
+    email: "",
+    phone: "",
+    location: "",
+    experience: "",
+    currentCompany: "",
+    currentCtc: "",
+    expectedCtc: "",
     noticePeriod: "Immediate Joiner (Serving Notice)",
-    education: "B.Tech CSE - IIT Roorkee",
-    linkedinUrl: "https://linkedin.com/in/siddharth-mathur",
-    githubUrl: "https://github.com/siddharthm",
-    resumeFileName: "Siddharth_Mathur_Resume.pdf",
+    education: "",
+    linkedinUrl: "",
+    githubUrl: "",
+    resumeFileName: "",
     answers: {},
-    pitchNotes: "Led distributed transaction ordering services handling 35,000+ peak RPS with sub-15ms p99 latency. Immediate joiner ready for fast rounds."
-  });
+    pitchNotes: ""
+  };
+
+  const [applyForm, setApplyForm] = useState(emptyApplyForm);
 
   // Extract unique departments & locations across all active jobs
   const departments = useMemo(() => {
@@ -149,10 +151,31 @@ export const ExpertHirePlatform = () => {
     selectedExp
   ]);
 
-  // Open apply modal for a specific job
+  // Open apply modal for a specific job (clean empty form for applicant)
   const handleOpenApply = (job) => {
     setSelectedJobForApply(job);
     setAppliedSuccess(false);
+    setApplyForm({
+      name: "",
+      email: "",
+      phone: "",
+      location: "",
+      experience: "",
+      currentCompany: "",
+      currentCtc: "",
+      expectedCtc: "",
+      noticePeriod: "Immediate Joiner (Serving Notice)",
+      education: "",
+      linkedinUrl: "",
+      githubUrl: "",
+      resumeFileName: "",
+      answers: {},
+      pitchNotes: ""
+    });
+  };
+
+  // Optional helper to populate sample candidate data on demand
+  const handleFillDemoData = () => {
     setApplyForm({
       name: "Siddharth Mathur",
       email: "siddharth.mathur@gmail.com",
@@ -167,7 +190,10 @@ export const ExpertHirePlatform = () => {
       linkedinUrl: "https://linkedin.com/in/siddharth-mathur",
       githubUrl: "https://github.com/siddharthm",
       resumeFileName: "Siddharth_Mathur_Resume.pdf",
-      answers: {},
+      answers: {
+        0: "Serving notice, available in 15 days. Current fixed 28 LPA, expecting 42 LPA.",
+        1: "Experience with autoscaling via HPA and KEDA under sudden burst traffic."
+      },
       pitchNotes: "Led distributed transaction ordering services handling 35,000+ peak RPS with sub-15ms p99 latency. Immediate joiner ready for fast rounds."
     });
   };
@@ -1038,105 +1064,132 @@ export const ExpertHirePlatform = () => {
       </main>
 
       {/* ULTRA-MODERN DIRECT APPLICATION MODAL */}
-      {selectedJobForApply && (
-        <div
-          className="modal-overlay"
-          style={{
-            backdropFilter: "blur(12px)",
-            backgroundColor: "rgba(15, 23, 42, 0.65)",
-            zIndex: 100
-          }}
-          onClick={() => setSelectedJobForApply(null)}
-        >
+      {selectedJobForApply && (() => {
+        const targetComp =
+          companies.find((c) => c.id === selectedJobForApply.companyId) || activeCompany;
+
+        return (
           <div
-            className="modal-content"
+            className="modal-overlay"
             style={{
-              maxWidth: 740,
-              borderRadius: "20px",
-              boxShadow: "0 28px 80px rgba(0, 0, 0, 0.35), 0 0 0 1px var(--border-subtle)",
-              background: "var(--bg-surface)",
-              overflow: "hidden"
+              backdropFilter: "blur(12px)",
+              backgroundColor: "rgba(15, 23, 42, 0.7)",
+              zIndex: 1000,
+              padding: "20px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center"
             }}
-            onClick={(e) => e.stopPropagation()}
+            onClick={() => setSelectedJobForApply(null)}
           >
-            {/* Modal Header */}
-            {(() => {
-              const targetComp =
-                companies.find((c) => c.id === selectedJobForApply.companyId) || activeCompany;
-
-              return (
-                <div
-                  style={{
-                    padding: "22px 28px 18px",
-                    background: "linear-gradient(180deg, var(--bg-surface-elevated) 0%, var(--bg-surface) 100%)",
-                    borderBottom: "1px solid var(--border-subtle)"
-                  }}
-                >
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-                      {targetComp?.logoUrl ? (
-                        <img
-                          src={targetComp.logoUrl}
-                          alt={targetComp.name}
-                          style={{
-                            width: 46,
-                            height: 46,
-                            borderRadius: "12px",
-                            objectFit: "contain",
-                            background: "var(--bg-surface)",
-                            border: "1px solid var(--border-subtle)",
-                            padding: 3,
-                            boxShadow: "0 4px 12px rgba(0,0,0,0.06)",
-                            flexShrink: 0
-                          }}
-                        />
-                      ) : (
-                        <div
-                          style={{
-                            width: 46,
-                            height: 46,
-                            borderRadius: "12px",
-                            background: targetComp?.brandColor || "var(--primary)",
-                            color: "#fff",
-                            fontSize: "1rem",
-                            fontWeight: 800,
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            boxShadow: "0 4px 12px rgba(0,0,0,0.08)",
-                            flexShrink: 0
-                          }}
-                        >
-                          {targetComp?.logoInitials || "CO"}
-                        </div>
-                      )}
-
-                      <div>
-                        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                          <span style={{ fontSize: "0.85rem", fontWeight: 800, color: "var(--primary)" }}>
-                            {targetComp?.name}
-                          </span>
-                          <span style={{ color: "var(--text-muted)", fontSize: "0.8rem" }}>&bull;</span>
-                          <span style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>
-                            {targetComp?.headquarters?.split("&")[0]?.trim() || "India HQ"}
-                          </span>
-                          <ShieldCheck size={14} color="#059669" />
-                        </div>
-
-                        <h2
-                          style={{
-                            fontSize: "1.3rem",
-                            fontWeight: 900,
-                            margin: "2px 0 0",
-                            color: "var(--text-primary)",
-                            lineHeight: 1.25
-                          }}
-                        >
-                          {selectedJobForApply.title}
-                        </h2>
+            <div
+              className="modal-content"
+              style={{
+                maxWidth: 760,
+                width: "100%",
+                maxHeight: "92vh",
+                display: "flex",
+                flexDirection: "column",
+                borderRadius: "20px",
+                boxShadow: "0 28px 80px rgba(0, 0, 0, 0.4), 0 0 0 1px var(--border-subtle)",
+                background: "var(--bg-surface)",
+                overflow: "hidden"
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Modal Header (Fixed at top) */}
+              <div
+                style={{
+                  padding: "20px 28px 16px",
+                  background: "linear-gradient(180deg, var(--bg-surface-elevated) 0%, var(--bg-surface) 100%)",
+                  borderBottom: "1px solid var(--border-subtle)",
+                  flexShrink: 0
+                }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                    {targetComp?.logoUrl ? (
+                      <img
+                        src={targetComp.logoUrl}
+                        alt={targetComp.name}
+                        style={{
+                          width: 46,
+                          height: 46,
+                          borderRadius: "12px",
+                          objectFit: "contain",
+                          background: "var(--bg-surface)",
+                          border: "1px solid var(--border-subtle)",
+                          padding: 3,
+                          boxShadow: "0 4px 12px rgba(0,0,0,0.06)",
+                          flexShrink: 0
+                        }}
+                      />
+                    ) : (
+                      <div
+                        style={{
+                          width: 46,
+                          height: 46,
+                          borderRadius: "12px",
+                          background: targetComp?.brandColor || "var(--primary)",
+                          color: "#fff",
+                          fontSize: "1rem",
+                          fontWeight: 800,
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          boxShadow: "0 4px 12px rgba(0,0,0,0.08)",
+                          flexShrink: 0
+                        }}
+                      >
+                        {targetComp?.logoInitials || "CO"}
                       </div>
-                    </div>
+                    )}
 
+                    <div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                        <span style={{ fontSize: "0.85rem", fontWeight: 800, color: "var(--primary)" }}>
+                          {targetComp?.name}
+                        </span>
+                        <span style={{ color: "var(--text-muted)", fontSize: "0.8rem" }}>&bull;</span>
+                        <span style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>
+                          {targetComp?.headquarters?.split("&")[0]?.trim() || "India HQ"}
+                        </span>
+                        <ShieldCheck size={14} color="#059669" />
+                      </div>
+
+                      <h2
+                        style={{
+                          fontSize: "1.25rem",
+                          fontWeight: 900,
+                          margin: "2px 0 0",
+                          color: "var(--text-primary)",
+                          lineHeight: 1.25
+                        }}
+                      >
+                        {selectedJobForApply.title}
+                      </h2>
+                    </div>
+                  </div>
+
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    {!appliedSuccess && (
+                      <button
+                        type="button"
+                        className="btn btn-secondary btn-sm"
+                        style={{
+                          fontSize: "0.75rem",
+                          padding: "5px 12px",
+                          borderRadius: "8px",
+                          border: "1px dashed var(--border-medium)",
+                          color: "var(--text-secondary)",
+                          fontWeight: 600
+                        }}
+                        onClick={handleFillDemoData}
+                        title="Click to automatically fill sample candidate data for quick testing"
+                      >
+                        Fill Sample Data
+                      </button>
+                    )}
                     <button
                       className="btn btn-ghost btn-icon"
                       style={{
@@ -1151,494 +1204,202 @@ export const ExpertHirePlatform = () => {
                       <X size={16} />
                     </button>
                   </div>
-
-                  {/* Requisition Specs Chips Row */}
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 14, flexWrap: "wrap" }}>
-                    <span
-                      style={{
-                        fontSize: "0.75rem",
-                        fontWeight: 800,
-                        padding: "4px 10px",
-                        borderRadius: "var(--radius-full)",
-                        background: "rgba(16, 185, 129, 0.1)",
-                        color: "#059669",
-                        border: "1px solid rgba(16, 185, 129, 0.25)",
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: 5
-                      }}
-                    >
-                      <IndianRupee size={12} />
-                      <span>₹ {selectedJobForApply.salary}</span>
-                    </span>
-
-                    <span
-                      style={{
-                        fontSize: "0.75rem",
-                        fontWeight: 600,
-                        padding: "4px 10px",
-                        borderRadius: "var(--radius-full)",
-                        background: "var(--bg-surface-elevated)",
-                        color: "var(--text-secondary)",
-                        border: "1px solid var(--border-subtle)",
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: 5
-                      }}
-                    >
-                      <MapPin size={12} color="var(--text-muted)" />
-                      <span>{selectedJobForApply.location}</span>
-                    </span>
-
-                    <span
-                      style={{
-                        fontSize: "0.75rem",
-                        fontWeight: 600,
-                        padding: "4px 10px",
-                        borderRadius: "var(--radius-full)",
-                        background: "var(--bg-surface-elevated)",
-                        color: "var(--text-secondary)",
-                        border: "1px solid var(--border-subtle)",
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: 5
-                      }}
-                    >
-                      <Briefcase size={12} color="var(--text-muted)" />
-                      <span>{selectedJobForApply.workType} &bull; {selectedJobForApply.department}</span>
-                    </span>
-
-                    <span
-                      style={{
-                        fontSize: "0.725rem",
-                        fontWeight: 800,
-                        padding: "4px 11px",
-                        borderRadius: "var(--radius-full)",
-                        background: "linear-gradient(135deg, rgba(79, 70, 229, 0.12) 0%, rgba(6, 182, 212, 0.12) 100%)",
-                        color: "#4f46e5",
-                        border: "1px solid rgba(79, 70, 229, 0.3)",
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: 5,
-                        marginLeft: "auto"
-                      }}
-                    >
-                      <Zap size={12} fill="#4f46e5" />
-                      <span>Source: ExpertHire Platform</span>
-                    </span>
-                  </div>
-                </div>
-              );
-            })()}
-
-            {appliedSuccess ? (
-              <div style={{ padding: "48px 28px", textAlign: "center" }}>
-                <div
-                  style={{
-                    width: 68,
-                    height: 68,
-                    borderRadius: "50%",
-                    background: "linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%)",
-                    color: "#059669",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    margin: "0 auto 16px",
-                    boxShadow: "0 8px 24px rgba(16, 185, 129, 0.25)",
-                    border: "2px solid #a7f3d0"
-                  }}
-                >
-                  <Check size={38} strokeWidth={2.5} />
-                </div>
-                <h3 style={{ fontSize: "1.5rem", fontWeight: 900, marginBottom: 8, color: "var(--text-primary)" }}>
-                  Application Dispatched Directly!
-                </h3>
-                <p style={{ fontSize: "0.9rem", color: "var(--text-secondary)", maxWidth: 460, margin: "0 auto 20px", lineHeight: 1.5 }}>
-                  <strong>{appliedCandidateName}</strong>, your application has been delivered directly into the employer's ATS pipeline at{" "}
-                  <strong>
-                    {companies.find((c) => c.id === selectedJobForApply.companyId)?.name ||
-                      activeCompany?.name}
-                  </strong>
-                  .
-                </p>
-
-                <div
-                  style={{
-                    background: "var(--bg-surface-elevated)",
-                    borderRadius: "14px",
-                    padding: "16px 20px",
-                    maxWidth: 460,
-                    margin: "0 auto 26px",
-                    fontSize: "0.825rem",
-                    textAlign: "left",
-                    border: "1px solid var(--border-subtle)"
-                  }}
-                >
-                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
-                    <span style={{ color: "var(--text-muted)" }}>Target Role:</span>
-                    <span style={{ fontWeight: 700 }}>{selectedJobForApply.title}</span>
-                  </div>
-                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
-                    <span style={{ color: "var(--text-muted)" }}>Source Attribution:</span>
-                    <span className="badge badge-source-experthire" style={{ fontSize: "0.75rem", padding: "2px 8px" }}>
-                      ExpertHire Platform
-                    </span>
-                  </div>
-                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
-                    <span style={{ color: "var(--text-muted)" }}>Client ATS:</span>
-                    <span style={{ fontWeight: 700 }}>
-                      {companies.find((c) => c.id === selectedJobForApply.companyId)?.name || activeCompany?.name}
-                    </span>
-                  </div>
-                  <div style={{ display: "flex", justifyContent: "space-between", paddingTop: 8, borderTop: "1px solid var(--border-subtle)" }}>
-                    <span style={{ color: "var(--text-muted)" }}>Application Ref ID:</span>
-                    <span style={{ fontFamily: "monospace", fontWeight: 800, color: "var(--primary)" }}>
-                      EH-DIR-{Math.floor(100000 + Math.random() * 900000)}
-                    </span>
-                  </div>
                 </div>
 
-                <div style={{ display: "flex", justifyContent: "center", gap: 12 }}>
-                  <button
-                    className="btn btn-secondary btn-sm"
-                    style={{ padding: "9px 18px", borderRadius: "10px" }}
-                    onClick={() => setSelectedJobForApply(null)}
-                  >
-                    Browse More Openings
-                  </button>
-                  <button
-                    className="btn btn-primary btn-sm"
+                {/* Requisition Specs Chips Row */}
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
+                  <span
                     style={{
-                      padding: "9px 20px",
-                      borderRadius: "10px",
-                      background: "linear-gradient(135deg, #4f46e5 0%, #06b6d4 100%)",
-                      border: "none",
-                      boxShadow: "0 2px 10px rgba(79, 70, 229, 0.3)"
-                    }}
-                    onClick={() => {
-                      setSelectedJobForApply(null);
-                      setActiveRole("company_admin");
+                      fontSize: "0.75rem",
+                      fontWeight: 800,
+                      padding: "3px 10px",
+                      borderRadius: "var(--radius-full)",
+                      background: "rgba(16, 185, 129, 0.1)",
+                      color: "#059669",
+                      border: "1px solid rgba(16, 185, 129, 0.25)",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 5
                     }}
                   >
-                    <span>View in Employer ATS Pipeline &rarr;</span>
-                  </button>
+                    <IndianRupee size={12} />
+                    <span>₹ {selectedJobForApply.salary}</span>
+                  </span>
+
+                  <span
+                    style={{
+                      fontSize: "0.75rem",
+                      fontWeight: 600,
+                      padding: "3px 10px",
+                      borderRadius: "var(--radius-full)",
+                      background: "var(--bg-surface)",
+                      color: "var(--text-secondary)",
+                      border: "1px solid var(--border-subtle)",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 5
+                    }}
+                  >
+                    <MapPin size={12} color="var(--text-muted)" />
+                    <span>{selectedJobForApply.location}</span>
+                  </span>
+
+                  <span
+                    style={{
+                      fontSize: "0.75rem",
+                      fontWeight: 600,
+                      padding: "3px 10px",
+                      borderRadius: "var(--radius-full)",
+                      background: "var(--bg-surface)",
+                      color: "var(--text-secondary)",
+                      border: "1px solid var(--border-subtle)",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 5
+                    }}
+                  >
+                    <Briefcase size={12} color="var(--text-muted)" />
+                    <span>{selectedJobForApply.workType} &bull; {selectedJobForApply.department}</span>
+                  </span>
+
+                  <span
+                    style={{
+                      fontSize: "0.725rem",
+                      fontWeight: 800,
+                      padding: "3px 11px",
+                      borderRadius: "var(--radius-full)",
+                      background: "linear-gradient(135deg, rgba(79, 70, 229, 0.12) 0%, rgba(6, 182, 212, 0.12) 100%)",
+                      color: "#4f46e5",
+                      border: "1px solid rgba(79, 70, 229, 0.3)",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 5,
+                      marginLeft: "auto"
+                    }}
+                  >
+                    <Zap size={12} fill="#4f46e5" />
+                    <span>Source: ExpertHire Platform</span>
+                  </span>
                 </div>
               </div>
-            ) : (
-              <form onSubmit={handleSubmitApplication}>
-                <div
-                  className="modal-body modal-custom-scroll"
-                  style={{
-                    padding: "20px 28px",
-                    maxHeight: "68vh",
-                    overflowY: "auto",
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: 18
-                  }}
-                >
-                  {/* SECTION 1: PERSONAL & CONTACT */}
+
+              {appliedSuccess ? (
+                <div style={{ padding: "48px 28px", textAlign: "center" }}>
+                  <div
+                    style={{
+                      width: 68,
+                      height: 68,
+                      borderRadius: "50%",
+                      background: "linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%)",
+                      color: "#059669",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      margin: "0 auto 16px",
+                      boxShadow: "0 8px 24px rgba(16, 185, 129, 0.25)",
+                      border: "2px solid #a7f3d0"
+                    }}
+                  >
+                    <Check size={38} strokeWidth={2.5} />
+                  </div>
+                  <h3 style={{ fontSize: "1.5rem", fontWeight: 900, marginBottom: 8, color: "var(--text-primary)" }}>
+                    Application Dispatched Directly!
+                  </h3>
+                  <p style={{ fontSize: "0.9rem", color: "var(--text-secondary)", maxWidth: 460, margin: "0 auto 20px", lineHeight: 1.5 }}>
+                    <strong>{appliedCandidateName}</strong>, your application has been delivered directly into the employer's ATS pipeline at{" "}
+                    <strong>{targetComp?.name}</strong>.
+                  </p>
+
                   <div
                     style={{
                       background: "var(--bg-surface-elevated)",
                       borderRadius: "14px",
-                      padding: "16px 18px",
+                      padding: "16px 20px",
+                      maxWidth: 460,
+                      margin: "0 auto 26px",
+                      fontSize: "0.825rem",
+                      textAlign: "left",
                       border: "1px solid var(--border-subtle)"
                     }}
                   >
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
-                      <span
-                        style={{
-                          width: 26,
-                          height: 26,
-                          borderRadius: "50%",
-                          background: "rgba(79, 70, 229, 0.12)",
-                          color: "var(--primary)",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center"
-                        }}
-                      >
-                        <User size={14} />
-                      </span>
-                      <span style={{ fontSize: "0.85rem", fontWeight: 800, color: "var(--text-primary)" }}>
-                        Personal & Contact Information
+                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
+                      <span style={{ color: "var(--text-muted)" }}>Target Role:</span>
+                      <span style={{ fontWeight: 700 }}>{selectedJobForApply.title}</span>
+                    </div>
+                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
+                      <span style={{ color: "var(--text-muted)" }}>Source Attribution:</span>
+                      <span className="badge badge-source-experthire" style={{ fontSize: "0.75rem", padding: "2px 8px" }}>
+                        ExpertHire Platform
                       </span>
                     </div>
-
-                    <div className="form-row" style={{ marginBottom: 12 }}>
-                      <div className="form-group" style={{ flex: 1.5, margin: 0 }}>
-                        <label className="form-label" style={{ fontSize: "0.775rem" }}>Full Legal Name *</label>
-                        <input
-                          type="text"
-                          required
-                          className="form-input"
-                          style={{ borderRadius: "8px" }}
-                          placeholder="e.g. Siddharth Mathur"
-                          value={applyForm.name}
-                          onChange={(e) => setApplyForm({ ...applyForm, name: e.target.value })}
-                        />
-                      </div>
-
-                      <div className="form-group" style={{ flex: 1.5, margin: 0 }}>
-                        <label className="form-label" style={{ fontSize: "0.775rem" }}>Email Address *</label>
-                        <input
-                          type="email"
-                          required
-                          className="form-input"
-                          style={{ borderRadius: "8px" }}
-                          placeholder="siddharth@gmail.com"
-                          value={applyForm.email}
-                          onChange={(e) => setApplyForm({ ...applyForm, email: e.target.value })}
-                        />
-                      </div>
+                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
+                      <span style={{ color: "var(--text-muted)" }}>Client ATS:</span>
+                      <span style={{ fontWeight: 700 }}>{targetComp?.name}</span>
                     </div>
-
-                    <div className="form-row" style={{ margin: 0 }}>
-                      <div className="form-group" style={{ flex: 1, margin: 0 }}>
-                        <label className="form-label" style={{ fontSize: "0.775rem" }}>Mobile Number (+91) *</label>
-                        <input
-                          type="tel"
-                          required
-                          className="form-input"
-                          style={{ borderRadius: "8px" }}
-                          placeholder="+91 98201 44821"
-                          value={applyForm.phone}
-                          onChange={(e) => setApplyForm({ ...applyForm, phone: e.target.value })}
-                        />
-                      </div>
-
-                      <div className="form-group" style={{ flex: 1, margin: 0 }}>
-                        <label className="form-label" style={{ fontSize: "0.775rem" }}>Current Location *</label>
-                        <input
-                          type="text"
-                          required
-                          className="form-input"
-                          style={{ borderRadius: "8px" }}
-                          value={applyForm.location}
-                          onChange={(e) => setApplyForm({ ...applyForm, location: e.target.value })}
-                        />
-                      </div>
+                    <div style={{ display: "flex", justifyContent: "space-between", paddingTop: 8, borderTop: "1px solid var(--border-subtle)" }}>
+                      <span style={{ color: "var(--text-muted)" }}>Application Ref ID:</span>
+                      <span style={{ fontFamily: "monospace", fontWeight: 800, color: "var(--primary)" }}>
+                        EH-DIR-{Math.floor(100000 + Math.random() * 900000)}
+                      </span>
                     </div>
                   </div>
 
-                  {/* SECTION 2: PROFESSIONAL & COMPENSATION */}
-                  <div
-                    style={{
-                      background: "var(--bg-surface-elevated)",
-                      borderRadius: "14px",
-                      padding: "16px 18px",
-                      border: "1px solid var(--border-subtle)"
-                    }}
-                  >
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
-                      <span
-                        style={{
-                          width: 26,
-                          height: 26,
-                          borderRadius: "50%",
-                          background: "rgba(16, 185, 129, 0.12)",
-                          color: "#059669",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center"
-                        }}
-                      >
-                        <Briefcase size={14} />
-                      </span>
-                      <span style={{ fontSize: "0.85rem", fontWeight: 800, color: "var(--text-primary)" }}>
-                        Current Engagement & Compensation
-                      </span>
-                    </div>
-
-                    <div className="form-row" style={{ marginBottom: 12 }}>
-                      <div className="form-group" style={{ flex: 1, margin: 0 }}>
-                        <label className="form-label" style={{ fontSize: "0.775rem" }}>Total Experience *</label>
-                        <input
-                          type="text"
-                          required
-                          className="form-input"
-                          style={{ borderRadius: "8px" }}
-                          placeholder="e.g. 6.5 years"
-                          value={applyForm.experience}
-                          onChange={(e) => setApplyForm({ ...applyForm, experience: e.target.value })}
-                        />
-                      </div>
-
-                      <div className="form-group" style={{ flex: 1.5, margin: 0 }}>
-                        <label className="form-label" style={{ fontSize: "0.775rem" }}>Current Company & Designation *</label>
-                        <input
-                          type="text"
-                          required
-                          className="form-input"
-                          style={{ borderRadius: "8px" }}
-                          placeholder="e.g. Swiggy - Senior Backend Engineer"
-                          value={applyForm.currentCompany}
-                          onChange={(e) => setApplyForm({ ...applyForm, currentCompany: e.target.value })}
-                        />
-                      </div>
-                    </div>
-
-                    <div className="form-row" style={{ marginBottom: 12 }}>
-                      <div className="form-group" style={{ flex: 1, margin: 0 }}>
-                        <label className="form-label" style={{ fontSize: "0.775rem" }}>Notice Period *</label>
-                        <select
-                          className="form-select"
-                          style={{ borderRadius: "8px", fontWeight: 600, color: "var(--text-primary)" }}
-                          value={applyForm.noticePeriod}
-                          onChange={(e) => setApplyForm({ ...applyForm, noticePeriod: e.target.value })}
-                        >
-                          <option value="Immediate Joiner (Serving Notice)">Immediate Joiner (Serving Notice)</option>
-                          <option value="15 Days Notice">15 Days Notice</option>
-                          <option value="30 Days Notice">30 Days Notice</option>
-                          <option value="60 Days Notice">60 Days Notice</option>
-                          <option value="90 Days Notice">90 Days Notice</option>
-                        </select>
-                      </div>
-
-                      <div className="form-group" style={{ flex: 1, margin: 0 }}>
-                        <label className="form-label" style={{ fontSize: "0.775rem" }}>Highest Qualification *</label>
-                        <input
-                          type="text"
-                          required
-                          className="form-input"
-                          style={{ borderRadius: "8px" }}
-                          placeholder="B.Tech CSE - IIT Roorkee"
-                          value={applyForm.education}
-                          onChange={(e) => setApplyForm({ ...applyForm, education: e.target.value })}
-                        />
-                      </div>
-                    </div>
-
-                    <div className="form-row" style={{ margin: 0 }}>
-                      <div className="form-group" style={{ flex: 1, margin: 0 }}>
-                        <label className="form-label" style={{ fontSize: "0.775rem" }}>Current Annual Fixed CTC *</label>
-                        <input
-                          type="text"
-                          required
-                          className="form-input"
-                          style={{ borderRadius: "8px" }}
-                          placeholder="₹28 LPA"
-                          value={applyForm.currentCtc}
-                          onChange={(e) => setApplyForm({ ...applyForm, currentCtc: e.target.value })}
-                        />
-                      </div>
-
-                      <div className="form-group" style={{ flex: 1, margin: 0 }}>
-                        <label className="form-label" style={{ fontSize: "0.775rem" }}>Expected Annual CTC *</label>
-                        <input
-                          type="text"
-                          required
-                          className="form-input"
-                          style={{ borderRadius: "8px", fontWeight: 700, color: "var(--primary)" }}
-                          placeholder="₹42 LPA"
-                          value={applyForm.expectedCtc}
-                          onChange={(e) => setApplyForm({ ...applyForm, expectedCtc: e.target.value })}
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* SECTION 3: PROFILES & PORTFOLIO */}
-                  <div
-                    style={{
-                      background: "var(--bg-surface-elevated)",
-                      borderRadius: "14px",
-                      padding: "16px 18px",
-                      border: "1px solid var(--border-subtle)"
-                    }}
-                  >
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
-                      <span
-                        style={{
-                          width: 26,
-                          height: 26,
-                          borderRadius: "50%",
-                          background: "rgba(2, 132, 199, 0.12)",
-                          color: "#0284c7",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center"
-                        }}
-                      >
-                        <Globe size={14} />
-                      </span>
-                      <span style={{ fontSize: "0.85rem", fontWeight: 800, color: "var(--text-primary)" }}>
-                        Tech Profiles & Verified Resume
-                      </span>
-                    </div>
-
-                    <div className="form-row" style={{ marginBottom: 12 }}>
-                      <div className="form-group" style={{ flex: 1, margin: 0 }}>
-                        <label className="form-label" style={{ fontSize: "0.775rem" }}>LinkedIn Profile URL</label>
-                        <input
-                          type="url"
-                          className="form-input"
-                          style={{ borderRadius: "8px" }}
-                          value={applyForm.linkedinUrl}
-                          onChange={(e) => setApplyForm({ ...applyForm, linkedinUrl: e.target.value })}
-                        />
-                      </div>
-
-                      <div className="form-group" style={{ flex: 1, margin: 0 }}>
-                        <label className="form-label" style={{ fontSize: "0.775rem" }}>GitHub / Tech Portfolio</label>
-                        <input
-                          type="url"
-                          className="form-input"
-                          style={{ borderRadius: "8px" }}
-                          value={applyForm.githubUrl}
-                          onChange={(e) => setApplyForm({ ...applyForm, githubUrl: e.target.value })}
-                        />
-                      </div>
-                    </div>
-
-                    {/* Resume Card Display */}
-                    <div
+                  <div style={{ display: "flex", justifyContent: "center", gap: 12 }}>
+                    <button
+                      className="btn btn-secondary btn-sm"
+                      style={{ padding: "9px 18px", borderRadius: "10px" }}
+                      onClick={() => setSelectedJobForApply(null)}
+                    >
+                      Browse More Openings
+                    </button>
+                    <button
+                      className="btn btn-primary btn-sm"
                       style={{
-                        background: "var(--bg-surface)",
-                        border: "1px dashed var(--border-medium)",
+                        padding: "9px 20px",
                         borderRadius: "10px",
-                        padding: "12px 16px",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "space-between"
+                        background: "linear-gradient(135deg, #4f46e5 0%, #06b6d4 100%)",
+                        border: "none",
+                        boxShadow: "0 2px 10px rgba(79, 70, 229, 0.3)"
+                      }}
+                      onClick={() => {
+                        setSelectedJobForApply(null);
+                        setActiveRole("company_admin");
                       }}
                     >
-                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                        <FileCheck size={20} color="#059669" />
-                        <div>
-                          <div style={{ fontSize: "0.825rem", fontWeight: 700, color: "var(--text-primary)" }}>
-                            {applyForm.resumeFileName}
-                          </div>
-                          <div style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}>
-                            PDF Document &bull; 185 KB &bull; Verified Candidate Attachment
-                          </div>
-                        </div>
-                      </div>
-
-                      <span
-                        style={{
-                          fontSize: "0.725rem",
-                          fontWeight: 700,
-                          color: "#059669",
-                          background: "#ecfdf5",
-                          padding: "3px 8px",
-                          borderRadius: "var(--radius-full)"
-                        }}
-                      >
-                        Ready
-                      </span>
-                    </div>
+                      <span>View in Employer ATS Pipeline &rarr;</span>
+                    </button>
                   </div>
-
-                  {/* SECTION 4: SCREENING QUESTIONS */}
-                  {selectedJobForApply.screeningQuestions && selectedJobForApply.screeningQuestions.length > 0 && (
+                </div>
+              ) : (
+                <form
+                  onSubmit={handleSubmitApplication}
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    flex: 1,
+                    minHeight: 0,
+                    overflow: "hidden"
+                  }}
+                >
+                  <div
+                    className="modal-body modal-custom-scroll"
+                    style={{
+                      padding: "20px 28px",
+                      flex: 1,
+                      minHeight: 0,
+                      overflowY: "auto",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: 18
+                    }}
+                  >
+                    {/* SECTION 1: PERSONAL & CONTACT */}
                     <div
                       style={{
-                        background: "linear-gradient(135deg, rgba(79, 70, 229, 0.04) 0%, rgba(6, 182, 212, 0.04) 100%)",
+                        background: "var(--bg-surface-elevated)",
                         borderRadius: "14px",
                         padding: "16px 18px",
-                        border: "1px solid rgba(79, 70, 229, 0.2)"
+                        border: "1px solid var(--border-subtle)"
                       }}
                     >
                       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
@@ -1647,117 +1408,466 @@ export const ExpertHirePlatform = () => {
                             width: 26,
                             height: 26,
                             borderRadius: "50%",
-                            background: "rgba(79, 70, 229, 0.15)",
+                            background: "rgba(79, 70, 229, 0.12)",
                             color: "var(--primary)",
                             display: "flex",
                             alignItems: "center",
                             justifyContent: "center"
                           }}
                         >
-                          <Zap size={14} fill="currentColor" />
+                          <User size={14} />
                         </span>
-                        <div>
-                          <span style={{ fontSize: "0.85rem", fontWeight: 800, color: "var(--primary)" }}>
-                            Employer Screening Questions
-                          </span>
-                          <span style={{ fontSize: "0.7rem", color: "var(--text-muted)", display: "block" }}>
-                            Questions configured directly by the hiring leads
-                          </span>
-                        </div>
+                        <span style={{ fontSize: "0.85rem", fontWeight: 800, color: "var(--text-primary)" }}>
+                          Personal & Contact Information
+                        </span>
                       </div>
 
-                      {selectedJobForApply.screeningQuestions.map((q, idx) => (
-                        <div key={idx} style={{ marginBottom: 12 }}>
-                          <span style={{ fontSize: "0.8rem", fontWeight: 700, color: "var(--text-primary)", display: "block", marginBottom: 6 }}>
-                            {idx + 1}. {q}
-                          </span>
+                      <div className="form-row" style={{ marginBottom: 12 }}>
+                        <div className="form-group" style={{ flex: 1.5, margin: 0 }}>
+                          <label className="form-label" style={{ fontSize: "0.775rem" }}>Full Legal Name *</label>
                           <input
                             type="text"
                             required
                             className="form-input"
-                            style={{ borderRadius: "8px", background: "var(--bg-surface)" }}
-                            placeholder="Your technical answer..."
-                            value={applyForm.answers[idx] || (idx === 0 ? "Serving notice, available in 15 days. Current fixed 28 LPA, expecting 42 LPA." : "Experience with autoscaling via HPA and KEDA under sudden burst traffic.")}
-                            onChange={(e) =>
-                              setApplyForm({
-                                ...applyForm,
-                                answers: { ...applyForm.answers, [idx]: e.target.value }
-                              })
-                            }
+                            style={{ borderRadius: "8px" }}
+                            placeholder="e.g. Siddharth Mathur"
+                            value={applyForm.name}
+                            onChange={(e) => setApplyForm({ ...applyForm, name: e.target.value })}
                           />
                         </div>
-                      ))}
+
+                        <div className="form-group" style={{ flex: 1.5, margin: 0 }}>
+                          <label className="form-label" style={{ fontSize: "0.775rem" }}>Email Address *</label>
+                          <input
+                            type="email"
+                            required
+                            className="form-input"
+                            style={{ borderRadius: "8px" }}
+                            placeholder="e.g. siddharth@gmail.com"
+                            value={applyForm.email}
+                            onChange={(e) => setApplyForm({ ...applyForm, email: e.target.value })}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="form-row" style={{ margin: 0 }}>
+                        <div className="form-group" style={{ flex: 1, margin: 0 }}>
+                          <label className="form-label" style={{ fontSize: "0.775rem" }}>Mobile Number (+91) *</label>
+                          <input
+                            type="tel"
+                            required
+                            className="form-input"
+                            style={{ borderRadius: "8px" }}
+                            placeholder="e.g. +91 98201 44821"
+                            value={applyForm.phone}
+                            onChange={(e) => setApplyForm({ ...applyForm, phone: e.target.value })}
+                          />
+                        </div>
+
+                        <div className="form-group" style={{ flex: 1, margin: 0 }}>
+                          <label className="form-label" style={{ fontSize: "0.775rem" }}>Current Location *</label>
+                          <input
+                            type="text"
+                            required
+                            className="form-input"
+                            style={{ borderRadius: "8px" }}
+                            placeholder="e.g. Bengaluru, Karnataka"
+                            value={applyForm.location}
+                            onChange={(e) => setApplyForm({ ...applyForm, location: e.target.value })}
+                          />
+                        </div>
+                      </div>
                     </div>
-                  )}
 
-                  {/* Pitch to Hiring Team */}
-                  <div>
-                    <label className="form-label" style={{ fontSize: "0.78rem" }}>
-                      Executive Pitch to the Hiring Lead (Optional)
-                    </label>
-                    <textarea
-                      rows={2}
-                      className="form-input"
-                      style={{ borderRadius: "10px", fontSize: "0.825rem", lineHeight: 1.45 }}
-                      placeholder="Highlight past systems scale, architectural achievements, or why you are excited for this role..."
-                      value={applyForm.pitchNotes}
-                      onChange={(e) => setApplyForm({ ...applyForm, pitchNotes: e.target.value })}
-                    />
-                  </div>
-                </div>
-
-                {/* Modal Footer */}
-                <div
-                  className="modal-footer"
-                  style={{
-                    padding: "18px 28px",
-                    background: "var(--bg-surface)",
-                    borderTop: "1px solid var(--border-subtle)",
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center"
-                  }}
-                >
-                  <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: "0.75rem", color: "var(--text-muted)" }}>
-                    <ShieldCheck size={16} color="#059669" />
-                    <span>Direct ATS delivery &bull; Zero agency fees</span>
-                  </div>
-
-                  <div style={{ display: "flex", gap: 10 }}>
-                    <button
-                      type="button"
-                      className="btn btn-secondary"
-                      style={{ borderRadius: "10px", padding: "10px 18px" }}
-                      onClick={() => setSelectedJobForApply(null)}
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="submit"
-                      className="btn btn-primary"
+                    {/* SECTION 2: PROFESSIONAL & COMPENSATION */}
+                    <div
                       style={{
-                        padding: "10px 24px",
-                        borderRadius: "10px",
-                        background: "linear-gradient(135deg, #4f46e5 0%, #06b6d4 100%)",
-                        border: "none",
-                        boxShadow: "0 4px 14px rgba(79, 70, 229, 0.35)",
-                        fontWeight: 800,
-                        fontSize: "0.875rem",
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 8
+                        background: "var(--bg-surface-elevated)",
+                        borderRadius: "14px",
+                        padding: "16px 18px",
+                        border: "1px solid var(--border-subtle)"
                       }}
                     >
-                      <Send size={15} />
-                      <span>Submit Application Direct &rarr;</span>
-                    </button>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+                        <span
+                          style={{
+                            width: 26,
+                            height: 26,
+                            borderRadius: "50%",
+                            background: "rgba(16, 185, 129, 0.12)",
+                            color: "#059669",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center"
+                          }}
+                        >
+                          <Briefcase size={14} />
+                        </span>
+                        <span style={{ fontSize: "0.85rem", fontWeight: 800, color: "var(--text-primary)" }}>
+                          Current Engagement & Compensation
+                        </span>
+                      </div>
+
+                      <div className="form-row" style={{ marginBottom: 12 }}>
+                        <div className="form-group" style={{ flex: 1, margin: 0 }}>
+                          <label className="form-label" style={{ fontSize: "0.775rem" }}>Total Experience *</label>
+                          <input
+                            type="text"
+                            required
+                            className="form-input"
+                            style={{ borderRadius: "8px" }}
+                            placeholder="e.g. 6 years"
+                            value={applyForm.experience}
+                            onChange={(e) => setApplyForm({ ...applyForm, experience: e.target.value })}
+                          />
+                        </div>
+
+                        <div className="form-group" style={{ flex: 1.5, margin: 0 }}>
+                          <label className="form-label" style={{ fontSize: "0.775rem" }}>Current Company & Designation *</label>
+                          <input
+                            type="text"
+                            required
+                            className="form-input"
+                            style={{ borderRadius: "8px" }}
+                            placeholder="e.g. Senior Software Engineer"
+                            value={applyForm.currentCompany}
+                            onChange={(e) => setApplyForm({ ...applyForm, currentCompany: e.target.value })}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="form-row" style={{ marginBottom: 12 }}>
+                        <div className="form-group" style={{ flex: 1, margin: 0 }}>
+                          <label className="form-label" style={{ fontSize: "0.775rem" }}>Notice Period *</label>
+                          <select
+                            className="form-select"
+                            style={{ borderRadius: "8px", fontWeight: 600, color: "var(--text-primary)" }}
+                            value={applyForm.noticePeriod}
+                            onChange={(e) => setApplyForm({ ...applyForm, noticePeriod: e.target.value })}
+                          >
+                            <option value="Immediate Joiner (Serving Notice)">Immediate Joiner (Serving Notice)</option>
+                            <option value="15 Days Notice">15 Days Notice</option>
+                            <option value="30 Days Notice">30 Days Notice</option>
+                            <option value="60 Days Notice">60 Days Notice</option>
+                            <option value="90 Days Notice">90 Days Notice</option>
+                          </select>
+                        </div>
+
+                        <div className="form-group" style={{ flex: 1, margin: 0 }}>
+                          <label className="form-label" style={{ fontSize: "0.775rem" }}>Highest Qualification *</label>
+                          <input
+                            type="text"
+                            required
+                            className="form-input"
+                            style={{ borderRadius: "8px" }}
+                            placeholder="e.g. B.Tech CSE - IIT Roorkee"
+                            value={applyForm.education}
+                            onChange={(e) => setApplyForm({ ...applyForm, education: e.target.value })}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="form-row" style={{ margin: 0 }}>
+                        <div className="form-group" style={{ flex: 1, margin: 0 }}>
+                          <label className="form-label" style={{ fontSize: "0.775rem" }}>Current Annual Fixed CTC *</label>
+                          <input
+                            type="text"
+                            required
+                            className="form-input"
+                            style={{ borderRadius: "8px" }}
+                            placeholder="e.g. ₹28 LPA"
+                            value={applyForm.currentCtc}
+                            onChange={(e) => setApplyForm({ ...applyForm, currentCtc: e.target.value })}
+                          />
+                        </div>
+
+                        <div className="form-group" style={{ flex: 1, margin: 0 }}>
+                          <label className="form-label" style={{ fontSize: "0.775rem" }}>Expected Annual CTC *</label>
+                          <input
+                            type="text"
+                            required
+                            className="form-input"
+                            style={{ borderRadius: "8px", fontWeight: 700, color: "var(--primary)" }}
+                            placeholder="e.g. ₹42 LPA"
+                            value={applyForm.expectedCtc}
+                            onChange={(e) => setApplyForm({ ...applyForm, expectedCtc: e.target.value })}
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* SECTION 3: PROFILES & PORTFOLIO */}
+                    <div
+                      style={{
+                        background: "var(--bg-surface-elevated)",
+                        borderRadius: "14px",
+                        padding: "16px 18px",
+                        border: "1px solid var(--border-subtle)"
+                      }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+                        <span
+                          style={{
+                            width: 26,
+                            height: 26,
+                            borderRadius: "50%",
+                            background: "rgba(2, 132, 199, 0.12)",
+                            color: "#0284c7",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center"
+                          }}
+                        >
+                          <Globe size={14} />
+                        </span>
+                        <span style={{ fontSize: "0.85rem", fontWeight: 800, color: "var(--text-primary)" }}>
+                          Tech Profiles & Resume Attachment
+                        </span>
+                      </div>
+
+                      <div className="form-row" style={{ marginBottom: 12 }}>
+                        <div className="form-group" style={{ flex: 1, margin: 0 }}>
+                          <label className="form-label" style={{ fontSize: "0.775rem" }}>LinkedIn Profile URL</label>
+                          <input
+                            type="url"
+                            className="form-input"
+                            style={{ borderRadius: "8px" }}
+                            placeholder="e.g. https://linkedin.com/in/username"
+                            value={applyForm.linkedinUrl}
+                            onChange={(e) => setApplyForm({ ...applyForm, linkedinUrl: e.target.value })}
+                          />
+                        </div>
+
+                        <div className="form-group" style={{ flex: 1, margin: 0 }}>
+                          <label className="form-label" style={{ fontSize: "0.775rem" }}>GitHub / Tech Portfolio</label>
+                          <input
+                            type="url"
+                            className="form-input"
+                            style={{ borderRadius: "8px" }}
+                            placeholder="e.g. https://github.com/username"
+                            value={applyForm.githubUrl}
+                            onChange={(e) => setApplyForm({ ...applyForm, githubUrl: e.target.value })}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Resume Upload / Card */}
+                      {applyForm.resumeFileName ? (
+                        <div
+                          style={{
+                            background: "var(--bg-surface)",
+                            border: "1px solid #10b981",
+                            borderRadius: "10px",
+                            padding: "12px 16px",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "space-between"
+                          }}
+                        >
+                          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                            <FileCheck size={20} color="#059669" />
+                            <div>
+                              <div style={{ fontSize: "0.825rem", fontWeight: 700, color: "var(--text-primary)" }}>
+                                {applyForm.resumeFileName}
+                              </div>
+                              <div style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}>
+                                Attached Document &bull; Verified Candidate File
+                              </div>
+                            </div>
+                          </div>
+
+                          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                            <span
+                              style={{
+                                fontSize: "0.725rem",
+                                fontWeight: 700,
+                                color: "#059669",
+                                background: "#ecfdf5",
+                                padding: "3px 8px",
+                                borderRadius: "var(--radius-full)"
+                              }}
+                            >
+                              Ready
+                            </span>
+                            <button
+                              type="button"
+                              className="btn btn-ghost btn-sm"
+                              style={{ fontSize: "0.725rem", padding: "3px 8px", color: "var(--text-muted)" }}
+                              onClick={() => setApplyForm({ ...applyForm, resumeFileName: "" })}
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <label
+                          style={{
+                            background: "var(--bg-surface)",
+                            border: "2px dashed var(--border-medium)",
+                            borderRadius: "10px",
+                            padding: "16px",
+                            display: "flex",
+                            flexDirection: "column",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            gap: 6,
+                            cursor: "pointer",
+                            transition: "all 0.15s ease"
+                          }}
+                        >
+                          <Upload size={22} color="var(--primary)" />
+                          <span style={{ fontSize: "0.825rem", fontWeight: 700, color: "var(--text-primary)" }}>
+                            Upload Resume (PDF or DOCX up to 10MB)
+                          </span>
+                          <span style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>
+                            Click to browse from your device or drop file here
+                          </span>
+                          <input
+                            type="file"
+                            accept=".pdf,.doc,.docx"
+                            style={{ display: "none" }}
+                            onChange={(e) => {
+                              if (e.target.files && e.target.files[0]) {
+                                setApplyForm({ ...applyForm, resumeFileName: e.target.files[0].name });
+                              }
+                            }}
+                          />
+                        </label>
+                      )}
+                    </div>
+
+                    {/* SECTION 4: SCREENING QUESTIONS */}
+                    {selectedJobForApply.screeningQuestions && selectedJobForApply.screeningQuestions.length > 0 && (
+                      <div
+                        style={{
+                          background: "linear-gradient(135deg, rgba(79, 70, 229, 0.04) 0%, rgba(6, 182, 212, 0.04) 100%)",
+                          borderRadius: "14px",
+                          padding: "16px 18px",
+                          border: "1px solid rgba(79, 70, 229, 0.2)"
+                        }}
+                      >
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+                          <span
+                            style={{
+                              width: 26,
+                              height: 26,
+                              borderRadius: "50%",
+                              background: "rgba(79, 70, 229, 0.15)",
+                              color: "var(--primary)",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center"
+                            }}
+                          >
+                            <Zap size={14} fill="currentColor" />
+                          </span>
+                          <div>
+                            <span style={{ fontSize: "0.85rem", fontWeight: 800, color: "var(--primary)" }}>
+                              Employer Screening Questions
+                            </span>
+                            <span style={{ fontSize: "0.7rem", color: "var(--text-muted)", display: "block" }}>
+                              Questions configured directly by the hiring leads
+                            </span>
+                          </div>
+                        </div>
+
+                        {selectedJobForApply.screeningQuestions.map((q, idx) => (
+                          <div key={idx} style={{ marginBottom: 12 }}>
+                            <span style={{ fontSize: "0.8rem", fontWeight: 700, color: "var(--text-primary)", display: "block", marginBottom: 6 }}>
+                              {idx + 1}. {q}
+                            </span>
+                            <input
+                              type="text"
+                              required
+                              className="form-input"
+                              style={{ borderRadius: "8px", background: "var(--bg-surface)" }}
+                              placeholder={idx === 0 ? "e.g. 15 days notice, current fixed 28 LPA, expecting 42 LPA" : "e.g. Share your relevant technical experience..."}
+                              value={applyForm.answers[idx] || ""}
+                              onChange={(e) =>
+                                setApplyForm({
+                                  ...applyForm,
+                                  answers: { ...applyForm.answers, [idx]: e.target.value }
+                                })
+                              }
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Pitch to Hiring Team */}
+                    <div>
+                      <label className="form-label" style={{ fontSize: "0.78rem" }}>
+                        Executive Pitch to the Hiring Lead (Optional)
+                      </label>
+                      <textarea
+                        rows={2}
+                        className="form-input"
+                        style={{ borderRadius: "10px", fontSize: "0.825rem", lineHeight: 1.45 }}
+                        placeholder="Highlight past systems scale, architectural achievements, or why you are excited for this role..."
+                        value={applyForm.pitchNotes}
+                        onChange={(e) => setApplyForm({ ...applyForm, pitchNotes: e.target.value })}
+                      />
+                    </div>
                   </div>
-                </div>
-              </form>
-            )}
+
+                  {/* Modal Footer (Always Visible Sticky Footer with Apply Button) */}
+                  <div
+                    className="modal-footer"
+                    style={{
+                      padding: "16px 28px",
+                      background: "var(--bg-surface)",
+                      borderTop: "1px solid var(--border-medium)",
+                      boxShadow: "0 -4px 16px rgba(0, 0, 0, 0.05)",
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      flexShrink: 0,
+                      zIndex: 10
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: "0.75rem", color: "var(--text-muted)" }}>
+                      <ShieldCheck size={16} color="#059669" />
+                      <span>Direct ATS delivery &bull; Zero agency fees &bull; 100% Free</span>
+                    </div>
+
+                    <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                      <button
+                        type="button"
+                        className="btn btn-secondary"
+                        style={{ borderRadius: "10px", padding: "10px 18px", fontWeight: 600 }}
+                        onClick={() => setSelectedJobForApply(null)}
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        className="btn btn-primary"
+                        style={{
+                          padding: "11px 26px",
+                          borderRadius: "10px",
+                          background: "linear-gradient(135deg, #4f46e5 0%, #06b6d4 100%)",
+                          border: "none",
+                          boxShadow: "0 4px 14px rgba(79, 70, 229, 0.35)",
+                          fontWeight: 800,
+                          fontSize: "0.875rem",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 8,
+                          cursor: "pointer"
+                        }}
+                      >
+                        <Send size={15} />
+                        <span>Apply Directly to {targetComp?.name || "Company"} &rarr;</span>
+                      </button>
+                    </div>
+                  </div>
+                </form>
+              )}
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* ULTRA-MODERN JOB DETAILS SPEC DRAWER / MODAL */}
       {selectedJobForDetail && (
