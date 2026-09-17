@@ -1580,3 +1580,254 @@ input, select, textarea {
   justify-content: space-between;
   border-bottom: 1px solid var(--border-subtle);
 }
+
+/* =========================================================================
+   Super Admin Card Action Footers (Agencies & Companies)
+   ========================================================================= */
+.admin-card-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 14px;
+  margin-top: auto;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.admin-card-actions-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+}
+
+.admin-card-actions-grid-3 {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.btn-card-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 10px;
+  font-size: 0.775rem;
+  font-weight: 600;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  text-decoration: none;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+
+/* Suspend Action */
+.btn-card-suspend {
+  background: rgba(239, 68, 68, 0.08);
+  color: #ef4444;
+  border-color: rgba(239, 68, 68, 0.22);
+}
+.btn-card-suspend:hover {
+  background: rgba(239, 68, 68, 0.16);
+  border-color: rgba(239, 68, 68, 0.4);
+  color: #dc2626;
+  transform: translateY(-1px);
+}
+
+/* Activate Action */
+.btn-card-activate {
+  background: rgba(16, 185, 129, 0.08);
+  color: #10b981;
+  border-color: rgba(16, 185, 129, 0.25);
+}
+.btn-card-activate:hover {
+  background: rgba(16, 185, 129, 0.18);
+  border-color: rgba(16, 185, 129, 0.45);
+  color: #059669;
+  transform: translateY(-1px);
+}
+
+/* Neutral / Elevated Card Action (Credentials / Branding) */
+.btn-card-neutral {
+  background: var(--bg-surface-elevated);
+  color: var(--text-primary);
+  border-color: var(--border-medium);
+}
+.btn-card-neutral:hover {
+  background: var(--bg-surface);
+  border-color: var(--text-muted);
+  color: var(--text-primary);
+  transform: translateY(-1px);
+}
+
+/* Primary Full-Width CTA: Agency Portal Launch */
+.btn-card-launch-agency {
+  width: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 14px;
+  font-size: 0.825rem;
+  font-weight: 700;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  border: none;
+  background: linear-gradient(135deg, #ec4899 0%, #8b5cf6 100%);
+  color: #ffffff;
+  box-shadow: 0 2px 10px rgba(236, 72, 153, 0.28);
+  transition: all var(--transition-fast);
+}
+.btn-card-launch-agency:hover {
+  box-shadow: 0 4px 16px rgba(236, 72, 153, 0.45);
+  transform: translateY(-1px);
+  filter: brightness(1.05);
+}
+
+/* Primary Full-Width CTA: Employer ATS Launch */
+.btn-card-launch-company {
+  width: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 14px;
+  font-size: 0.825rem;
+  font-weight: 700;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  border: none;
+  background: linear-gradient(135deg, #4f46e5 0%, #0284c7 100%);
+  color: #ffffff;
+  box-shadow: 0 2px 10px rgba(79, 70, 229, 0.28);
+  transition: all var(--transition-fast);
+}
+.btn-card-launch-company:hover {
+  box-shadow: 0 4px 16px rgba(79, 70, 229, 0.45);
+  transform: translateY(-1px);
+  filter: brightness(1.05);
+}
+
+/* =========================================================================
+   Super Admin Enterprise Table & Launchpad Enhancements
+   ========================================================================= */
+.admin-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  text-align: left;
+}
+
+.admin-table th {
+  padding: 13px 18px;
+  font-size: 0.725rem;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  background: var(--bg-surface-elevated);
+  border-bottom: 1px solid var(--border-subtle);
+  white-space: nowrap;
+}
+
+.admin-table th:first-child {
+  border-top-left-radius: var(--radius-md);
+}
+
+.admin-table th:last-child {
+  border-top-right-radius: var(--radius-md);
+}
+
+.admin-table td {
+  padding: 14px 18px;
+  font-size: 0.825rem;
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  vertical-align: middle;
+}
+
+.admin-table tbody tr {
+  transition: background-color var(--transition-fast);
+}
+
+.admin-table tbody tr:hover td {
+  background: rgba(79, 70, 229, 0.035);
+  color: var(--text-primary);
+}
+
+.admin-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/* Password Pill in Admin Tables */
+.admin-pass-pill {
+  font-family: var(--font-mono);
+  font-size: 0.775rem;
+  padding: 4px 9px;
+  background: var(--bg-surface-elevated);
+  border-radius: 6px;
+  border: 1px solid var(--border-subtle);
+  color: var(--text-primary);
+  letter-spacing: 0.05em;
+  font-weight: 600;
+}
+
+/* Super Admin Action Cards */
+.admin-action-card {
+  background: var(--bg-surface);
+  padding: 20px 22px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-subtle);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 16px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
+  transition: all var(--transition-fast);
+  position: relative;
+  overflow: hidden;
+}
+
+.admin-action-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: transparent;
+  transition: background var(--transition-fast);
+}
+
+.admin-action-card:hover {
+  border-color: var(--border-medium);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.06);
+  transform: translateY(-2px);
+}
+
+.admin-action-card-company:hover::before {
+  background: linear-gradient(90deg, #4f46e5, #0284c7);
+}
+
+.admin-action-card-agency:hover::before {
+  background: linear-gradient(90deg, #db2777, #8b5cf6);
+}
+
+.admin-action-card-team:hover::before {
+  background: linear-gradient(90deg, #0284c7, #059669);
+}
+
+/* KPI Card Accent Tops */
+.kpi-accent-indigo {
+  border-top: 3px solid #4f46e5;
+}
+.kpi-accent-fuchsia {
+  border-top: 3px solid #db2777;
+}
+.kpi-accent-emerald {
+  border-top: 3px solid #059669;
+}
+.kpi-accent-sky {
+  border-top: 3px solid #0284c7;
+}
+

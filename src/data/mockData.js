@@ -49,6 +49,7 @@ export const INITIAL_COMPANY = {
   plan: "Enterprise Scale Tier",
   status: "Active",
   primaryAdmin: "vikram@bharatscale.in",
+  adminPassword: "BharatScale@2026!",
   createdAt: "2025-01-15"
 };
 
@@ -70,6 +71,7 @@ export const INITIAL_COMPANIES = [
     plan: "Hypergrowth Tier",
     status: "Active",
     primaryAdmin: "hr@zeptolabs.in",
+    adminPassword: "ZeptoLabs#2026!",
     createdAt: "2025-03-20"
   },
   {
@@ -88,6 +90,7 @@ export const INITIAL_COMPANIES = [
     plan: "Enterprise Scale Tier",
     status: "Active",
     primaryAdmin: "talent@razorinfra.com",
+    adminPassword: "Razorpay$Infra26!",
     createdAt: "2025-06-10"
   }
 ];
@@ -659,6 +662,7 @@ export const INITIAL_AGENCIES = [
     portalCode: "NAUKRI-ELITE-BLR",
     primaryContact: "Vikas Malhotra",
     email: "vikas.malhotra@naukrielite.in",
+    portalPassword: "Naukri@Elite2026!",
     phone: "+91 98201 55432",
     city: "Bengaluru",
     activeJobsAssigned: 3,
@@ -666,6 +670,7 @@ export const INITIAL_AGENCIES = [
     placementsHired: 3,
     totalBountiesEarned: "₹2,25,000",
     status: "active",
+    tier: "Elite Partner",
     rating: 4.9,
     joinedDate: "2026-02-15"
   },
@@ -675,6 +680,7 @@ export const INITIAL_AGENCIES = [
     portalCode: "ABC-INDIA-MUM",
     primaryContact: "Ritu Sengupta",
     email: "ritu.sengupta@abcconsultants.in",
+    portalPassword: "ABC@Consult2026!",
     phone: "+91 98450 77123",
     city: "Mumbai & Gurugram",
     activeJobsAssigned: 3,
@@ -682,6 +688,7 @@ export const INITIAL_AGENCIES = [
     placementsHired: 2,
     totalBountiesEarned: "₹1,50,000",
     status: "active",
+    tier: "Certified Headhunter",
     rating: 4.8,
     joinedDate: "2026-04-10"
   },
@@ -691,6 +698,7 @@ export const INITIAL_AGENCIES = [
     portalCode: "SUTRA-TECH-PUN",
     primaryContact: "Waqar Sheikh",
     email: "waqar@sutrahr.in",
+    portalPassword: "Sutra#HR2026!",
     phone: "+91 97112 88401",
     city: "Pune & Bengaluru",
     activeJobsAssigned: 2,
@@ -698,6 +706,7 @@ export const INITIAL_AGENCIES = [
     placementsHired: 1,
     totalBountiesEarned: "₹75,000",
     status: "active",
+    tier: "Elite Partner",
     rating: 5.0,
     joinedDate: "2026-06-20"
   }

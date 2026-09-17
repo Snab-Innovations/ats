@@ -455,9 +455,32 @@ export const AtsProvider = ({ children }) => {
       totalBountiesEarned: "₹0",
       status: "active",
       rating: 5.0,
+      tier: agencyData.tier || "Elite Partner",
+      portalPassword: agencyData.portalPassword || "Agency#2026!",
       ...agencyData,
     };
-    setAgencies((prev) => [...prev, newAgency]);
+    setAgencies((prev) => [newAgency, ...prev]);
+    return newAgency;
+  };
+
+  const toggleAgencyStatus = (agencyId) => {
+    setAgencies((prev) =>
+      prev.map((a) =>
+        a.id === agencyId
+          ? { ...a, status: a.status === "active" ? "suspended" : "active" }
+          : a
+      )
+    );
+  };
+
+  const updateAgency = (agencyId, updatedData) => {
+    setAgencies((prev) =>
+      prev.map((a) => (a.id === agencyId ? { ...a, ...updatedData } : a))
+    );
+  };
+
+  const removeAgency = (agencyId) => {
+    setAgencies((prev) => prev.filter((a) => a.id !== agencyId));
   };
 
   const updateCareerSettings = (newSettings) => {
@@ -498,13 +521,14 @@ export const AtsProvider = ({ children }) => {
       id: `comp-${Date.now().toString(36)}`,
       status: "Active",
       createdAt: new Date().toISOString().split("T")[0],
-      employeeCount: "50-250 Builders",
+      employeeCount: newTenant.employeeCount || "50-250 Builders",
       logoInitials: initials,
       logoBadgeColor: "linear-gradient(135deg, #4f46e5 0%, #0284c7 100%)",
-      coverImage: COVER_PRESETS[0].url,
-      brandColor: "#4f46e5",
-      accentColor: "#0284c7",
-      plan: "Enterprise Scale Tier",
+      coverImage: newTenant.coverImage || COVER_PRESETS[0].url,
+      brandColor: newTenant.brandColor || "#4f46e5",
+      accentColor: newTenant.accentColor || "#0284c7",
+      plan: newTenant.plan || "Enterprise Scale Tier",
+      adminPassword: newTenant.adminPassword || "Company#2026!",
       ...newTenant,
     };
     setCompanies((prev) => [created, ...prev]);
@@ -516,6 +540,7 @@ export const AtsProvider = ({ children }) => {
         companyId: created.id,
         name: created.primaryAdminName || "Primary Administrator",
         email: created.primaryAdmin,
+        password: created.adminPassword,
         role: "Company Admin",
         title: "Head of Talent / VP",
         department: "Talent Acquisition",
@@ -527,6 +552,27 @@ export const AtsProvider = ({ children }) => {
     }
 
     return created;
+  };
+
+  const toggleCompanyStatus = (companyId) => {
+    setCompanies((prev) =>
+      prev.map((c) =>
+        c.id === companyId
+          ? { ...c, status: c.status === "Active" ? "Suspended" : "Active" }
+          : c
+      )
+    );
+  };
+
+  const updateCompanyCredentials = (companyId, credentials) => {
+    setCompanies((prev) =>
+      prev.map((c) => (c.id === companyId ? { ...c, ...credentials } : c))
+    );
+  };
+
+  const removeCompanyTenant = (companyId) => {
+    setCompanies((prev) => prev.filter((c) => c.id !== companyId));
+    setCompanyUsers((prev) => prev.filter((u) => u.companyId !== companyId));
   };
 
   const updateCompanyBranding = (companyId, brandingData) => {
@@ -633,6 +679,12 @@ export const AtsProvider = ({ children }) => {
         toggleJobSyndication,
         scheduleInterview,
         addAgency,
+        toggleAgencyStatus,
+        updateAgency,
+        removeAgency,
+        toggleCompanyStatus,
+        updateCompanyCredentials,
+        removeCompanyTenant,
         updateCareerSettings,
         resetToDefaults,
       }}
