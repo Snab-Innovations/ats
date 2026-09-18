@@ -1,5 +1,7 @@
 import React from "react";
+import { useNavigate } from "react-router-dom";
 import { useAts } from "../context/AtsContext";
+import { getCompanySlug } from "../utils/companySlug";
 import {
   LayoutDashboard,
   Briefcase,
@@ -14,7 +16,8 @@ import {
   ShieldCheck,
   Globe,
   MonitorPlay,
-  Zap
+  Zap,
+  LogOut
 } from "lucide-react";
 
 export const AdminSidebar = () => {
@@ -29,8 +32,12 @@ export const AdminSidebar = () => {
     companyUsers = [],
     setIsJobModalOpen,
     setEditingJob,
-    setActiveRole
+    setActiveRole,
+    currentUser: sessionUser,
+    logout
   } = useAts();
+
+  const navigate = useNavigate();
 
   // Active jobs count strictly for this company
   const activeJobsCount = jobs.filter(
@@ -41,14 +48,14 @@ export const AdminSidebar = () => {
   const upcomingInterviewsCount = interviews.filter((i) => i.status === "Confirmed").length;
 
   // Find active company user for the footer
-  const currentUser = companyUsers.find((u) => u.companyId === company.id) || companyUsers[0] || {
+  const activeUser = sessionUser || companyUsers.find((u) => u.companyId === company.id) || companyUsers[0] || {
     name: "Vikram Singhania",
     role: "Company Admin",
     title: "VP Engineering"
   };
 
-  const userInitials = currentUser.name
-    ? currentUser.name
+  const userInitials = activeUser.name
+    ? activeUser.name
         .split(" ")
         .map((n) => n[0])
         .join("")
@@ -172,7 +179,7 @@ export const AdminSidebar = () => {
           onClick={() => setAdminTab("agencies")}
         >
           <UsersRound size={17} />
-          <span>Agency Network</span>
+          <span>Recruitment Agencies</span>
           <span className="sidebar-count-badge">{agencies.length}</span>
         </button>
 
@@ -230,11 +237,15 @@ export const AdminSidebar = () => {
               fontSize: "0.775rem",
               borderRadius: "var(--radius-sm)"
             }}
-            onClick={() => setActiveRole("public_careers")}
+            onClick={() => {
+              setActiveRole("public_careers");
+              navigate(`/career-site/${getCompanySlug(company)}`);
+            }}
+            title={`View ${company.name} Live Career Portal (/career-site/${getCompanySlug(company)})`}
           >
             <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
               <Globe size={13} color="var(--primary)" />
-              <span>Public Career Site</span>
+              <span>{company.name ? `${company.name.split(" ")[0]} Career Site` : "Public Career Site"}</span>
             </span>
             <ExternalLink size={11} color="var(--text-muted)" />
           </button>
@@ -276,45 +287,68 @@ export const AdminSidebar = () => {
         </div>
       </div>
 
-      {/* User Footer with Online Status */}
-      <div className="sidebar-footer">
-        <div className="user-avatar-sm">{userInitials}</div>
-        <div style={{ flex: 1, minWidth: 0, overflow: "hidden" }}>
-          <div
-            style={{
-              fontSize: "0.825rem",
-              fontWeight: 700,
-              color: "var(--text-primary)",
-              whiteSpace: "nowrap",
-              overflow: "hidden",
-              textOverflow: "ellipsis"
-            }}
-          >
-            {currentUser.name}
-          </div>
-          <div
-            style={{
-              fontSize: "0.7rem",
-              color: "var(--text-muted)",
-              whiteSpace: "nowrap",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              display: "flex",
-              alignItems: "center",
-              gap: 4
-            }}
-          >
-            <span
+      {/* User Footer with Online Status & Sign Out */}
+      <div className="sidebar-footer" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0, flex: 1 }}>
+          <div className="user-avatar-sm">{userInitials}</div>
+          <div style={{ flex: 1, minWidth: 0, overflow: "hidden" }}>
+            <div
               style={{
-                width: 5,
-                height: 5,
-                borderRadius: "50%",
-                background: "#10b981"
+                fontSize: "0.825rem",
+                fontWeight: 700,
+                color: "var(--text-primary)",
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis"
               }}
-            />
-            <span>{currentUser.role || "Admin"} &bull; {company.plan?.split(" ")[0] || "Active"}</span>
+            >
+              {activeUser.name}
+            </div>
+            <div
+              style={{
+                fontSize: "0.7rem",
+                color: "var(--text-muted)",
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                display: "flex",
+                alignItems: "center",
+                gap: 4
+              }}
+            >
+              <span
+                style={{
+                  width: 5,
+                  height: 5,
+                  borderRadius: "50%",
+                  background: "#10b981"
+                }}
+              />
+              <span>{activeUser.title || activeUser.roleLabel || activeUser.role || "Company Admin"}</span>
+            </div>
           </div>
         </div>
+
+        <button
+          type="button"
+          onClick={logout}
+          className="btn btn-ghost btn-sm"
+          style={{
+            padding: "5px 8px",
+            height: 28,
+            color: "var(--text-muted)",
+            borderRadius: 6,
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 4,
+            fontSize: "0.7rem",
+            flexShrink: 0
+          }}
+          title="Sign Out to Login Portal"
+        >
+          <LogOut size={13} />
+          <span>Exit</span>
+        </button>
       </div>
 
       <div

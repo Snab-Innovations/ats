@@ -17,14 +17,17 @@ import {
 export const CandidatePipeline = () => {
   const {
     jobs,
+    company,
     candidates,
     changeStage,
+    promptStageChange,
     setSelectedCandidateId,
     setIsScheduleModalOpen,
     setSchedulingCandidate
   } = useAts();
 
   const [jobFilter, setJobFilter] = useState("all");
+  const [typeFilter, setTypeFilter] = useState("all"); // 'all' | 'Full-time' | 'Remote' | 'Hybrid' | 'Contract' | 'On-site'
   const [sourceFilter, setSourceFilter] = useState("all");
   const [noticeFilter, setNoticeFilter] = useState("all"); // 'all' | 'immediate' | 'serving'
   const [searchQuery, setSearchQuery] = useState("");
@@ -39,9 +42,44 @@ export const CandidatePipeline = () => {
     { id: "rejected", label: "Archived", color: "var(--status-rejected)" }
   ];
 
+  // ONLY jobs belonging to the current active company
+  const companyJobs = jobs.filter((j) => (j.companyId ? j.companyId === company.id : true));
+  const companyJobIds = new Set(companyJobs.map((j) => j.id));
+
+  // Distinct job & work types for this company
+  const availableTypes = Array.from(
+    new Set(
+      companyJobs
+        .flatMap((j) => [j.workType, j.employmentType])
+        .filter(Boolean)
+    )
+  );
+
+  const displayCompanyJobs =
+    typeFilter === "all"
+      ? companyJobs
+      : companyJobs.filter(
+          (j) =>
+            (j.workType && j.workType.toLowerCase() === typeFilter.toLowerCase()) ||
+            (j.employmentType && j.employmentType.toLowerCase() === typeFilter.toLowerCase())
+        );
+
   // Filtering logic
   const filteredCandidates = candidates.filter((c) => {
+    // Only candidates belonging to this company's jobs
+    const matchesCompany = !c.jobId || companyJobIds.has(c.jobId) || (c.companyId && c.companyId === company.id);
+    if (!matchesCompany) return false;
+
     const matchesJob = jobFilter === "all" || c.jobId === jobFilter;
+
+    // Type filter
+    const candidateJob = jobs.find((j) => j.id === c.jobId);
+    const matchesType =
+      typeFilter === "all" ||
+      (candidateJob &&
+        ((candidateJob.workType && candidateJob.workType.toLowerCase() === typeFilter.toLowerCase()) ||
+          (candidateJob.employmentType && candidateJob.employmentType.toLowerCase() === typeFilter.toLowerCase())));
+
     const matchesSource =
       sourceFilter === "all" ||
       (sourceFilter === "experthire_platform" && (c.sourceType === "experthire_platform" || c.source?.includes("ExpertHire"))) ||
@@ -61,7 +99,7 @@ export const CandidatePipeline = () => {
       (c.education && c.education.toLowerCase().includes(searchQuery.toLowerCase())) ||
       (c.tags && c.tags.some((t) => t.toLowerCase().includes(searchQuery.toLowerCase())));
 
-    return matchesJob && matchesSource && matchesNotice && matchesSearch;
+    return matchesJob && matchesType && matchesSource && matchesNotice && matchesSearch;
   });
 
   const getSourceBadgeClass = (sourceType, source = "") => {
@@ -133,19 +171,51 @@ export const CandidatePipeline = () => {
               />
             </div>
 
-            {/* Job Filter */}
+            {/* Job Requisition Filter - ONLY show jobs from this company */}
             <select
               className="form-select"
-              style={{ width: 220 }}
+              style={{ width: 230 }}
               value={jobFilter}
               onChange={(e) => setJobFilter(e.target.value)}
+              title={`Filter by ${company.name || "Company"} Requisitions`}
             >
-              <option value="all">All Job Requisitions</option>
-              {jobs.map((j) => (
+              <option value="all">
+                All {company.name ? company.name : "Company"} Requisitions ({companyJobs.length})
+              </option>
+              {displayCompanyJobs.map((j) => (
                 <option key={j.id} value={j.id}>
                   {j.title} ({j.department})
                 </option>
               ))}
+            </select>
+
+            {/* Type Option Filter */}
+            <select
+              className="form-select"
+              style={{ width: 145 }}
+              value={typeFilter}
+              onChange={(e) => {
+                setTypeFilter(e.target.value);
+                setJobFilter("all");
+              }}
+              title="Filter by Job / Work Type"
+            >
+              <option value="all">All Job Types</option>
+              {availableTypes.length > 0 ? (
+                availableTypes.map((t) => (
+                  <option key={t} value={t}>
+                    {t}
+                  </option>
+                ))
+              ) : (
+                <>
+                  <option value="Full-time">Full-time</option>
+                  <option value="Remote">Remote</option>
+                  <option value="Hybrid">Hybrid</option>
+                  <option value="Contract">Contract</option>
+                  <option value="On-site">On-site</option>
+                </>
+              )}
             </select>
 
             {/* Sourcing Channel Filter */}
@@ -344,7 +414,10 @@ export const CandidatePipeline = () => {
                                   className="btn btn-primary btn-sm"
                                   style={{ padding: "3px 9px", fontSize: "0.72rem" }}
                                   title={`Advance to ${nextStage}`}
-                                  onClick={() => changeStage(cand.id, nextStage)}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    promptStageChange(cand, nextStage);
+                                  }}
                                 >
                                   <span>Advance</span>
                                   <ChevronRight size={12} />

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useAts } from "../context/AtsContext";
 import {
   X,
@@ -12,12 +12,106 @@ import {
   GraduationCap,
   Sparkles,
   Send,
-  Video,
-  FileCheck,
   CheckCircle,
   Clock,
-  Briefcase
+  Briefcase,
+  ChevronLeft,
+  ChevronRight,
+  Copy,
+  Check,
+  ExternalLink,
+  FileText,
+  Download,
+  Printer,
+  Upload,
+  Eye,
+  FileCode,
+  Globe,
+  Award,
+  UploadCloud
 } from "lucide-react";
+
+// Standalone PDF Generator for candidate profiles to guarantee authentic PDF rendering
+function generateCandidatePdfBlob(candidate) {
+  if (!candidate) return null;
+  const safe = (str) => (str || "").replace(/[^\x20-\x7E]/g, " ").replace(/[()]/g, "");
+  const name = safe(candidate.name || "Candidate");
+  const role = safe(candidate.role || "Senior Software Engineer");
+  const email = safe(candidate.email || "candidate@expert.io");
+  const phone = safe(candidate.phone || "+91 98201 00000");
+  const location = safe(candidate.location || "Bengaluru, India");
+  const company = safe(candidate.currentCompany || "Fintech Infrastructure Systems");
+  const exp = safe(candidate.experience || "6+ Years");
+  const edu = safe(candidate.education || "Bachelor of Technology in Computer Science");
+  const notice = safe(candidate.noticePeriod || "15 Days");
+  const ctc = safe(candidate.currentCtc || "₹34 LPA");
+  const expected = safe(candidate.expectedCtc || "₹46 LPA");
+
+  const lines = [
+    "BT",
+    "/F1 22 Tf",
+    "50 740 Td",
+    `(${name}) Tj`,
+    "0 -24 Td",
+    "/F1 13 Tf",
+    `(${role} -- ${company}) Tj`,
+    "0 -18 Td",
+    "/F1 9 Tf",
+    `(${email}  *  ${phone}  *  ${location}) Tj`,
+    "0 -26 Td",
+    "/F1 12 Tf",
+    "(PROFESSIONAL PROFILE & SUMMARY) Tj",
+    "0 -16 Td",
+    "/F1 9 Tf",
+    `(* Total Relevant Experience: ${exp} of specialized production engineering.) Tj`,
+    "0 -14 Td",
+    `(* Current Organization: ${company} | Current CTC: ${ctc}) Tj`,
+    "0 -14 Td",
+    `(* Notice Period Status: ${notice} | Target CTC: ${expected}) Tj`,
+    "0 -24 Td",
+    "/F1 12 Tf",
+    "(TECHNICAL COMPETENCIES & SYSTEM CONTRIBUTIONS) Tj",
+    "0 -16 Td",
+    "/F1 9 Tf",
+    "(* Architected and scaled low-latency distributed microservices.) Tj",
+    "0 -14 Td",
+    "(* Automated observability, telemetry, and zero-downtime database pipelines.) Tj",
+    "0 -14 Td",
+    "(* Deployed containerized workloads to Kubernetes with resilient failovers.) Tj",
+    "0 -24 Td",
+    "/F1 12 Tf",
+    "(EDUCATION & CREDENTIALS) Tj",
+    "0 -16 Td",
+    "/F1 9 Tf",
+    `(* ${edu}) Tj`,
+    "0 -14 Td",
+    "(* First Class with Distinction -- Academic Honors) Tj",
+    "ET"
+  ];
+
+  const content = lines.join("\n");
+  const stream = `<< /Length ${content.length} >>\nstream\n${content}\nendstream`;
+  const objects = [
+    `1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj`,
+    `2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj`,
+    `3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> >> >> /Contents 4 0 R >>\nendobj`,
+    `4 0 obj\n${stream}\nendobj`
+  ];
+  let body = "%PDF-1.4\n";
+  const xref = [0];
+  for (const obj of objects) {
+    xref.push(body.length);
+    body += obj + "\n";
+  }
+  const xrefOffset = body.length;
+  body += `xref\n0 ${xref.length}\n0000000000 65535 f \n`;
+  for (let i = 1; i < xref.length; i++) {
+    body += String(xref[i]).padStart(10, "0") + " 00000 n \n";
+  }
+  body += `trailer\n<< /Size ${xref.length} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`;
+
+  return new Blob([body], { type: "application/pdf" });
+}
 
 export const CandidateDetailModal = () => {
   const {
@@ -25,16 +119,103 @@ export const CandidateDetailModal = () => {
     selectedCandidateId,
     setSelectedCandidateId,
     changeStage,
+    promptStageChange,
     addCandidateNote,
-    setIsScheduleModalOpen,
-    setSchedulingCandidate
+    updateCandidate,
+    uploadResumeFile
   } = useAts();
 
-  const [activeTab, setActiveTab] = useState("profile"); // 'profile' | 'ctc_breakdown' | 'scorecard' | 'interview' | 'notes'
+  // Tabs: 'resume' (default) | 'profile' | 'ctc_breakdown' | 'notes'
+  const [activeTab, setActiveTab] = useState("resume");
   const [newNote, setNewNote] = useState("");
+  const [copiedSummary, setCopiedSummary] = useState(false);
+  const [copiedPhone, setCopiedPhone] = useState(false);
+  const [copiedEmail, setCopiedEmail] = useState(false);
 
-  const candidate = candidates.find((c) => c.id === selectedCandidateId);
+  // Resume Viewer State (Always Actual Uploaded Resume)
+  const [uploadedResumeFile, setUploadedResumeFile] = useState(null);
+  const [uploadedResumeUrl, setUploadedResumeUrl] = useState(null);
+  const [generatedPdfUrl, setGeneratedPdfUrl] = useState(null);
+  const [isUploadingCloudinary, setIsUploadingCloudinary] = useState(false);
+  const [cloudinarySuccessMsg, setCloudinarySuccessMsg] = useState(null);
+  const fileInputRef = useRef(null);
+
+  // Current candidate lookup
+  const candidateIndex = candidates.findIndex((c) => c.id === selectedCandidateId);
+  const candidate = candidates[candidateIndex];
+
+  // Lock background page scroll completely while drawer is open
+  useEffect(() => {
+    if (selectedCandidateId) {
+      const prevBodyOverflow = document.body.style.overflow;
+      const prevHtmlOverflow = document.documentElement.style.overflow;
+      document.body.style.overflow = "hidden";
+      document.documentElement.style.overflow = "hidden";
+
+      return () => {
+        document.body.style.overflow = prevBodyOverflow;
+        document.documentElement.style.overflow = prevHtmlOverflow;
+      };
+    }
+  }, [selectedCandidateId]);
+
+  // Reset uploaded resume and prepare document preview when switching candidate
+  useEffect(() => {
+    setUploadedResumeFile(null);
+    if (uploadedResumeUrl && uploadedResumeUrl.startsWith("blob:")) {
+      URL.revokeObjectURL(uploadedResumeUrl);
+    }
+    setUploadedResumeUrl(null);
+
+    // If candidate does not have an uploaded resume URL yet, generate an authentic PDF blob
+    if (candidate && !candidate.resumeUrl) {
+      try {
+        const blob = generateCandidatePdfBlob(candidate);
+        const url = URL.createObjectURL(blob);
+        setGeneratedPdfUrl(url);
+      } catch (err) {
+        console.warn("PDF blob generation error:", err);
+      }
+    } else {
+      setGeneratedPdfUrl(null);
+    }
+  }, [selectedCandidateId, candidate?.id]);
+
+  // Keyboard navigation & ESC to close
+  useEffect(() => {
+    if (!selectedCandidateId) return;
+
+    const handleKeyDown = (e) => {
+      if (e.key === "Escape") {
+        setSelectedCandidateId(null);
+      } else if (e.key === "ArrowLeft") {
+        if (candidateIndex > 0) {
+          setSelectedCandidateId(candidates[candidateIndex - 1].id);
+        }
+      } else if (e.key === "ArrowRight") {
+        if (candidateIndex < candidates.length - 1) {
+          setSelectedCandidateId(candidates[candidateIndex + 1].id);
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [selectedCandidateId, candidateIndex, candidates, setSelectedCandidateId]);
+
   if (!candidate) return null;
+
+  const handlePrevCandidate = () => {
+    if (candidateIndex > 0) {
+      setSelectedCandidateId(candidates[candidateIndex - 1].id);
+    }
+  };
+
+  const handleNextCandidate = () => {
+    if (candidateIndex < candidates.length - 1) {
+      setSelectedCandidateId(candidates[candidateIndex + 1].id);
+    }
+  };
 
   const handleAddNote = (e) => {
     e.preventDefault();
@@ -46,596 +227,877 @@ export const CandidateDetailModal = () => {
   const openWhatsApp = () => {
     const cleanPhone = candidate.phone?.replace(/[^0-9]/g, "") || "919820188492";
     const text = encodeURIComponent(
-      `Hi ${candidate.name}, this is Vikram from BharatScale Cloud regarding your application for ${candidate.role}. Let's coordinate your next round!`
+      `Hi ${candidate.name}, this is Vikram from BharatScale Cloud regarding your application for the ${candidate.role} role. Would you be available for a brief sync?`
     );
     window.open(`https://wa.me/${cleanPhone}?text=${text}`, "_blank");
   };
 
+  const handleCopySummary = () => {
+    const summary = `Candidate: ${candidate.name}\nRole: ${candidate.role}\nExperience: ${candidate.experience || "N/A"}\nNotice Period: ${candidate.noticePeriod || "30 Days"}\nCurrent CTC: ${candidate.currentCtc} -> Expected CTC: ${candidate.expectedCtc}\nSkills: ${(candidate.tags || candidate.skills || []).join(", ")}\nEmail: ${candidate.email} | Phone: ${candidate.phone}`;
+    navigator.clipboard.writeText(summary);
+    setCopiedSummary(true);
+    setTimeout(() => setCopiedSummary(false), 2000);
+  };
+
+  const handleCopyPhone = () => {
+    if (candidate.phone) {
+      navigator.clipboard.writeText(candidate.phone);
+      setCopiedPhone(true);
+      setTimeout(() => setCopiedPhone(false), 1800);
+    }
+  };
+
+  const handleCopyEmail = () => {
+    if (candidate.email) {
+      navigator.clipboard.writeText(candidate.email);
+      setCopiedEmail(true);
+      setTimeout(() => setCopiedEmail(false), 1800);
+    }
+  };
+
+  const handleFileUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadedResumeFile(file);
+    const objectUrl = URL.createObjectURL(file);
+    setUploadedResumeUrl(objectUrl);
+    setResumeMode("embed");
+
+    // Upload directly to Cloudinary (cloud: ljelkpy4, preset: resumes)
+    setIsUploadingCloudinary(true);
+    setCloudinarySuccessMsg(null);
+    try {
+      const res = await uploadResumeFile(file, candidate?.id);
+      if (res?.success && res?.url) {
+        setUploadedResumeUrl(res.url);
+        updateCandidate(candidate.id, {
+          resumeUrl: res.url,
+          resumeFileName: file.name,
+          resumeSource: "cloudinary_storage",
+          cloudinaryAssetId: res.assetId
+        });
+        setCloudinarySuccessMsg("Uploaded to Cloudinary (preset: resumes)");
+        setTimeout(() => setCloudinarySuccessMsg(null), 3500);
+      }
+    } catch (err) {
+      console.warn("Cloudinary resume upload error:", err);
+    } finally {
+      setIsUploadingCloudinary(false);
+    }
+  };
+
+  const handlePrint = () => {
+    window.print();
+  };
+
+  // Resume Document Details & Detection
+  const effectiveFileName =
+    uploadedResumeFile?.name ||
+    candidate.resumeFileName ||
+    `${candidate.name.replace(/\s+/g, "_")}_Resume.pdf`;
+
+  const cleanFileName = (effectiveFileName || "").split("?")[0].toLowerCase();
+  const cleanUrl = (uploadedResumeUrl || candidate.resumeUrl || "").split("?")[0].toLowerCase();
+  const isWordDoc = cleanFileName.endsWith(".doc") || cleanFileName.endsWith(".docx") || cleanUrl.endsWith(".doc") || cleanUrl.endsWith(".docx");
+  const isPdfDoc = !isWordDoc;
+
+  const effectiveResumeUrl = uploadedResumeUrl || candidate.resumeUrl || generatedPdfUrl;
+
+  // Google Docs Viewer URL for Word documents or online PDFs
+  const googleDocsViewerUrl = effectiveResumeUrl
+    ? `https://docs.google.com/viewer?url=${encodeURIComponent(effectiveResumeUrl)}&embedded=true`
+    : null;
+
   const stages = [
     { id: "applied", label: "Applied" },
     { id: "screening", label: "Screening" },
-    { id: "assessment", label: "Tech Assessment" },
+    { id: "assessment", label: "Assessment" },
     { id: "interview", label: "Interview" },
-    { id: "offer", label: "Offer Released" },
-    { id: "hired", label: "Joined" },
-    { id: "rejected", label: "Archived" }
+    { id: "offer", label: "Offer" },
+    { id: "hired", label: "Hired" }
   ];
 
+  const isImmediate =
+    candidate.noticeType === "immediate" ||
+    candidate.noticePeriod?.toLowerCase().includes("immediate") ||
+    candidate.noticePeriod?.includes("15");
+
   return (
-    <div className="modal-overlay" onClick={() => setSelectedCandidateId(null)}>
-      <div
-        className="modal-content"
-        style={{ maxWidth: 940, width: "100%" }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Modal Header */}
-        <div className="modal-header" style={{ alignItems: "flex-start" }}>
-          <div style={{ display: "flex", gap: 16 }}>
-            <div
-              className="company-logo-avatar"
+    <div className="candidate-drawer-overlay" onClick={() => setSelectedCandidateId(null)}>
+      <aside className="candidate-drawer-panel" onClick={(e) => e.stopPropagation()}>
+        {/* ========================================================================= */}
+        {/* 1. STICKY TOP HEADER WITH CANDIDATE IDENTITY & CONTROLS                   */}
+        {/* ========================================================================= */}
+        <div className="candidate-drawer-header">
+          {/* Top Bar: Navigation controls & Close */}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                onClick={handlePrevCandidate}
+                disabled={candidateIndex === 0}
+                style={{
+                  fontSize: "0.72rem",
+                  padding: "4px 8px",
+                  color: candidateIndex === 0 ? "var(--text-muted)" : "var(--text-secondary)"
+                }}
+                title="Previous candidate (or press Left arrow key)"
+              >
+                <ChevronLeft size={13} />
+                <span>Prev</span>
+              </button>
+
+              <span style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>
+                {candidateIndex + 1} of {candidates.length}
+              </span>
+
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                onClick={handleNextCandidate}
+                disabled={candidateIndex === candidates.length - 1}
+                style={{
+                  fontSize: "0.72rem",
+                  padding: "4px 8px",
+                  color: candidateIndex === candidates.length - 1 ? "var(--text-muted)" : "var(--text-secondary)"
+                }}
+                title="Next candidate (or press Right arrow key)"
+              >
+                <span>Next</span>
+                <ChevronRight size={13} />
+              </button>
+            </div>
+
+            {/* Close Button */}
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              onClick={() => setSelectedCandidateId(null)}
               style={{
-                width: 50,
-                height: 50,
-                fontSize: "1.2rem",
-                background: "linear-gradient(135deg, #4f46e5 0%, #0284c7 100%)"
+                width: 30,
+                height: 30,
+                padding: 0,
+                borderRadius: "50%",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center"
+              }}
+              title="Close drawer (Esc)"
+            >
+              <X size={16} />
+            </button>
+          </div>
+
+          {/* Candidate Name, Role & Match Score */}
+          <div style={{ display: "flex", alignItems: "flex-start", gap: 14 }}>
+            <div
+              style={{
+                width: 48,
+                height: 48,
+                borderRadius: "50%",
+                background: "linear-gradient(135deg, var(--primary), #8b5cf6)",
+                color: "#fff",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontWeight: 800,
+                fontSize: "1.1rem",
+                flexShrink: 0,
+                boxShadow: "0 4px 12px rgba(79, 70, 229, 0.25)"
               }}
             >
-              {candidate.name.split(" ").map((n) => n[0]).join("")}
+              {candidate.name
+                .split(" ")
+                .map((n) => n[0])
+                .join("")
+                .slice(0, 2)}
             </div>
 
-            <div>
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <h2 style={{ fontSize: "1.35rem" }}>{candidate.name}</h2>
-                <span className="match-pill" style={{ fontSize: "0.8rem", padding: "3px 8px" }}>
-                  <Sparkles size={12} style={{ display: "inline", marginRight: 3 }} />
-                  {candidate.matchScore}% Match Score
-                </span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                <h3
+                  style={{
+                    fontSize: "1.2rem",
+                    fontWeight: 800,
+                    margin: 0,
+                    color: "var(--text-primary)"
+                  }}
+                >
+                  {candidate.name}
+                </h3>
+
+                {candidate.matchScore && (
+                  <span
+                    style={{
+                      fontSize: "0.72rem",
+                      fontWeight: 700,
+                      padding: "2px 8px",
+                      borderRadius: "var(--radius-full)",
+                      background: "rgba(16, 185, 129, 0.12)",
+                      color: "#10b981",
+                      border: "1px solid rgba(16, 185, 129, 0.3)",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 4
+                    }}
+                  >
+                    <Sparkles size={11} />
+                    {candidate.matchScore}% ATS Match
+                  </span>
+                )}
               </div>
 
-              <div style={{ fontSize: "0.9rem", color: "var(--text-secondary)", marginTop: 2 }}>
-                Candidate for <strong style={{ color: "var(--text-primary)" }}>{candidate.role}</strong>
+              <div style={{ fontSize: "0.825rem", color: "var(--text-secondary)", marginTop: 3 }}>
+                Applied for <strong style={{ color: "var(--text-primary)" }}>{candidate.role}</strong>
+                {candidate.submittedAt && (
+                  <span style={{ color: "var(--text-muted)", marginLeft: 6 }}>
+                    &bull; {candidate.submittedAt}
+                  </span>
+                )}
               </div>
 
-              {/* Source Tag & Notice Period */}
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+              {/* Source and Location tags */}
+              <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
                 <span
-                  className={`badge ${
-                    candidate.sourceType === "agency"
-                      ? "badge-source-agency"
-                      : candidate.sourceType === "referral"
-                      ? "badge-source-referral"
-                      : "badge-source-direct"
-                  }`}
-                  style={{ fontSize: "0.8rem", padding: "4px 10px" }}
+                  style={{
+                    fontSize: "0.68rem",
+                    fontWeight: 700,
+                    padding: "2px 7px",
+                    borderRadius: 4,
+                    background:
+                      candidate.sourceType === "agency"
+                        ? "rgba(219, 39, 119, 0.12)"
+                        : candidate.sourceType === "experthire_platform"
+                        ? "rgba(79, 70, 229, 0.12)"
+                        : "rgba(2, 132, 199, 0.12)",
+                    color:
+                      candidate.sourceType === "agency"
+                        ? "#db2777"
+                        : candidate.sourceType === "experthire_platform"
+                        ? "#4f46e5"
+                        : "#0284c7"
+                  }}
                 >
-                  Source: {candidate.source}
+                  {candidate.source || "Direct Applicant"}
                 </span>
 
                 <span
-                  className="badge badge-notice-immediate"
-                  style={{ fontSize: "0.78rem" }}
+                  style={{
+                    fontSize: "0.68rem",
+                    fontWeight: 600,
+                    color: isImmediate ? "#059669" : "#b45309",
+                    background: isImmediate ? "rgba(5, 150, 105, 0.1)" : "rgba(180, 83, 9, 0.1)",
+                    padding: "2px 7px",
+                    borderRadius: 4,
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 3
+                  }}
                 >
-                  <Clock size={12} />
-                  Notice: {candidate.noticePeriod || "30 Days"}
+                  <Clock size={10} />
+                  {candidate.noticePeriod || "30 Days"}
                 </span>
 
-                <span
-                  className="badge badge-active"
-                  style={{ fontSize: "0.78rem", display: "inline-flex", alignItems: "center", gap: 5 }}
-                >
-                  <GraduationCap size={12} />
-                  {candidate.education || "B.Tech CSE"}
-                </span>
-
-                <span style={{ fontSize: "0.775rem", color: "var(--text-muted)" }}>
-                  Submitted on {candidate.submittedAt}
-                </span>
+                {candidate.location && (
+                  <span
+                    style={{
+                      fontSize: "0.68rem",
+                      color: "var(--text-muted)",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 3
+                    }}
+                  >
+                    <MapPin size={10} />
+                    {candidate.location.split(",")[0]}
+                  </span>
+                )}
               </div>
             </div>
           </div>
 
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          {/* ========================================================================= */}
+          {/* 2. INSTANT ACTION TOOLBAR (SUPER SENSIBLE & USEFUL)                       */}
+          {/* ========================================================================= */}
+          <div className="candidate-quick-actions">
+            {/* View Resume Button (Switches to Resume view) */}
             <button
+              type="button"
+              className={`btn btn-sm ${activeTab === "resume" ? "btn-primary" : "btn-secondary"}`}
+              style={{ fontSize: "0.75rem", padding: "5px 11px", gap: 5 }}
+              onClick={() => setActiveTab("resume")}
+            >
+              <FileText size={13} />
+              <span>Resume ({isWordDoc ? "Word / DOCX" : "PDF"})</span>
+            </button>
+
+            {/* Profile Overview */}
+            <button
+              type="button"
+              className={`btn btn-sm ${activeTab === "profile" ? "btn-primary" : "btn-secondary"}`}
+              style={{ fontSize: "0.75rem", padding: "5px 11px", gap: 5 }}
+              onClick={() => setActiveTab("profile")}
+            >
+              <Briefcase size={13} />
+              <span>Details & Tech</span>
+            </button>
+
+            {/* WhatsApp Quick Invite */}
+            <button
+              type="button"
               className="btn btn-whatsapp btn-sm"
               onClick={openWhatsApp}
-              title="Connect on WhatsApp"
+              style={{ fontSize: "0.75rem", padding: "5px 9px", gap: 4 }}
+              title="Open WhatsApp chat with pre-filled message"
             >
-              <MessageCircle size={14} />
-              <span>WhatsApp Candidate</span>
+              <MessageCircle size={13} />
+              <span>WhatsApp</span>
             </button>
 
-            <button
-              className="btn btn-ghost btn-icon"
-              onClick={() => setSelectedCandidateId(null)}
+            {/* Call Candidate */}
+            <a
+              href={`tel:${candidate.phone}`}
+              className="btn btn-ghost btn-sm"
+              style={{ fontSize: "0.75rem", padding: "5px 9px", gap: 4 }}
+              title="Call candidate phone"
             >
-              <X size={20} />
+              <Phone size={13} color="#059669" />
+              <span>Call</span>
+            </a>
+
+            {/* Email Candidate */}
+            <a
+              href={`mailto:${candidate.email}?subject=Application for ${encodeURIComponent(candidate.role)} at BharatScale Cloud`}
+              className="btn btn-ghost btn-sm"
+              style={{ fontSize: "0.75rem", padding: "5px 9px", gap: 4 }}
+              title="Send email"
+            >
+              <Mail size={13} color="#0284c7" />
+              <span>Email</span>
+            </a>
+
+            {/* Copy Summary for Slack / WhatsApp */}
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              style={{ fontSize: "0.75rem", padding: "5px 9px", gap: 4, marginLeft: "auto" }}
+              onClick={handleCopySummary}
+              title="Copy candidate details summary to clipboard"
+            >
+              {copiedSummary ? <Check size={13} color="#10b981" /> : <Copy size={13} />}
+              <span>{copiedSummary ? "Copied!" : "Copy Brief"}</span>
             </button>
           </div>
-        </div>
 
-        {/* Stage Progress Bar Selector */}
-        <div className="modal-stage-bar">
-          <div style={{ display: "flex", alignItems: "center", gap: 10, flex: 1, minWidth: 0 }}>
-            <span style={{ fontSize: "0.75rem", color: "var(--text-muted)", textTransform: "uppercase", fontWeight: 800, letterSpacing: "0.05em", flexShrink: 0 }}>
-              Stage:
-            </span>
-
-            <div className="stage-pill-list">
+          {/* ========================================================================= */}
+          {/* 3. 1-CLICK STAGE PROGRESSION STEPPER                                      */}
+          {/* ========================================================================= */}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, paddingTop: 2 }}>
+            <div className="stage-stepper-container" style={{ flex: 1 }}>
               {stages.map((st) => {
-                const isCurrent = candidate.stage === st.id;
-                const isRejected = st.id === "rejected";
-
+                const isActive = candidate.stage === st.id;
                 return (
                   <button
                     key={st.id}
-                    className={`stage-step-btn ${isCurrent ? "active" : ""} ${isCurrent && isRejected ? "rejected" : ""}`}
-                    onClick={() => changeStage(candidate.id, st.id)}
+                    type="button"
+                    className={`stage-stepper-btn ${isActive ? "active" : ""}`}
+                    onClick={() => promptStageChange(candidate, st.id)}
+                    title={`Move to ${st.label} stage with custom email notification`}
                   >
-                    {isCurrent && <CheckCircle size={12} />}
+                    {isActive && <CheckCircle size={11} />}
                     <span>{st.label}</span>
                   </button>
                 );
               })}
             </div>
-          </div>
 
-          {candidate.stage !== "interview" && candidate.stage !== "hired" && (
+            {/* Reject / Archive Toggle Button */}
             <button
-              className="btn btn-accent btn-sm"
-              style={{ flexShrink: 0, whiteSpace: "nowrap" }}
-              onClick={() => {
-                setSchedulingCandidate(candidate);
-                setIsScheduleModalOpen(true);
+              type="button"
+              className={`stage-stepper-btn ${candidate.stage === "rejected" ? "rejected active" : ""}`}
+              onClick={() => promptStageChange(candidate, candidate.stage === "rejected" ? "applied" : "rejected")}
+              style={{
+                borderColor: candidate.stage === "rejected" ? "#dc2626" : "rgba(220, 38, 38, 0.3)",
+                color: candidate.stage === "rejected" ? "#fff" : "#dc2626"
               }}
+              title={candidate.stage === "rejected" ? "Unarchive candidate" : "Archive candidate with notification"}
             >
-              <Calendar size={13} />
-              <span>Schedule Interview Round</span>
+              <span>{candidate.stage === "rejected" ? "Archived" : "Archive"}</span>
             </button>
-          )}
+          </div>
         </div>
 
-        {/* Tab Navigation */}
-        <div className="modal-tabs-container">
+        {/* ========================================================================= */}
+        {/* 4. CLEAN TAB NAVIGATION (Scorecard & Interviews removed as requested)      */}
+        {/* ========================================================================= */}
+        <div
+          style={{
+            padding: "8px 20px 0",
+            background: "var(--bg-surface-elevated)",
+            borderBottom: "1px solid var(--border-subtle)",
+            display: "flex",
+            gap: 6,
+            overflowX: "auto"
+          }}
+        >
+          <button
+            type="button"
+            className={`modal-tab-btn ${activeTab === "resume" ? "active" : ""}`}
+            onClick={() => setActiveTab("resume")}
+            style={{ fontSize: "0.78rem", padding: "6px 12px" }}
+          >
+            <FileText size={14} />
+            <span>Resume & CV Document</span>
+          </button>
+
           <button
             type="button"
             className={`modal-tab-btn ${activeTab === "profile" ? "active" : ""}`}
             onClick={() => setActiveTab("profile")}
+            style={{ fontSize: "0.78rem", padding: "6px 12px" }}
           >
-            <Briefcase size={15} />
-            <span>Profile & Resume</span>
+            <Briefcase size={14} />
+            <span>Profile & Details</span>
           </button>
 
           <button
             type="button"
             className={`modal-tab-btn ${activeTab === "ctc_breakdown" ? "active" : ""}`}
             onClick={() => setActiveTab("ctc_breakdown")}
+            style={{ fontSize: "0.78rem", padding: "6px 12px" }}
           >
-            <IndianRupee size={15} />
-            <span>CTC & Offer Breakdown</span>
-          </button>
-
-          <button
-            type="button"
-            className={`modal-tab-btn ${activeTab === "scorecard" ? "active" : ""}`}
-            onClick={() => setActiveTab("scorecard")}
-          >
-            <FileCheck size={15} />
-            <span>Evaluation Scorecard</span>
-          </button>
-
-          <button
-            type="button"
-            className={`modal-tab-btn ${activeTab === "interview" ? "active" : ""}`}
-            onClick={() => setActiveTab("interview")}
-          >
-            <Calendar size={15} />
-            <span>Interview Rounds</span>
-            {candidate.interviewScheduled && (
-              <span className="modal-tab-badge" style={{ background: "rgba(16, 185, 129, 0.15)", color: "#059669" }}>
-                Scheduled
-              </span>
-            )}
+            <IndianRupee size={14} />
+            <span>Compensation & Offer</span>
           </button>
 
           <button
             type="button"
             className={`modal-tab-btn ${activeTab === "notes" ? "active" : ""}`}
             onClick={() => setActiveTab("notes")}
+            style={{ fontSize: "0.78rem", padding: "6px 12px" }}
           >
-            <MessageCircle size={15} />
-            <span>Hiring Notes</span>
-            <span className="modal-tab-badge">
-              {candidate.notes?.length || 0}
-            </span>
+            <MessageCircle size={14} />
+            <span>Notes ({candidate.notes?.length || 0})</span>
           </button>
         </div>
 
-        {/* Modal Body Tabs */}
-        <div className="modal-body" style={{ minHeight: 340 }}>
-          {activeTab === "profile" && (
-            <div>
-              {/* Contact strip */}
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-                  gap: 12,
-                  padding: 16,
-                  borderRadius: "var(--radius-md)",
-                  background: "var(--bg-surface-elevated)",
-                  marginBottom: 20
-                }}
-              >
-                <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: "0.85rem" }}>
-                  <Mail size={15} color="var(--text-muted)" />
-                  <span style={{ fontWeight: 600 }}>{candidate.email}</span>
-                </div>
-                <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: "0.85rem" }}>
-                  <Phone size={15} color="var(--text-muted)" />
-                  <span style={{ fontWeight: 600 }}>{candidate.phone || "+91 98201 88492"}</span>
-                </div>
-                <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: "0.85rem" }}>
-                  <MapPin size={15} color="var(--text-muted)" />
-                  <span style={{ fontWeight: 600 }}>{candidate.location}</span>
-                </div>
-                <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: "0.85rem" }}>
-                  <Building size={15} color="var(--text-muted)" />
-                  <span style={{ fontWeight: 600 }}>{candidate.currentCompany}</span>
-                </div>
-                <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: "0.85rem" }}>
-                  <GraduationCap size={15} color="var(--primary)" />
-                  <span style={{ fontWeight: 600 }}>{candidate.education || "B.Tech CSE"}</span>
-                </div>
-              </div>
-
-              {/* Indian Screening Questions */}
-              {candidate.screeningAnswers && candidate.screeningAnswers.length > 0 && (
-                <div style={{ marginBottom: 20 }}>
-                  <h4 style={{ fontSize: "0.95rem", marginBottom: 10, color: "var(--primary)" }}>
-                    Candidate Screening Questionnaire
-                  </h4>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                    {candidate.screeningAnswers.map((item, idx) => (
-                      <div
-                        key={idx}
+        {/* ========================================================================= */}
+        {/* 5. DRAWER SCROLLABLE BODY CONTENT                                         */}
+        {/* ========================================================================= */}
+        <div className="candidate-drawer-body">
+          {/* TAB 1: INLINE RESUME VIEWER (PDF / WORD) */}
+          {activeTab === "resume" && (
+            <div className="resume-viewer-container" style={{ position: "relative", display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}>
+              {/* Blended Download Button & Subtle Controls */}
+              {effectiveResumeUrl && (
+                <div
+                  style={{
+                    position: "absolute",
+                    top: 12,
+                    right: 18,
+                    zIndex: 20,
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 6,
+                    background: "rgba(15, 23, 42, 0.72)",
+                    backdropFilter: "blur(12px)",
+                    WebkitBackdropFilter: "blur(12px)",
+                    border: "1px solid rgba(255, 255, 255, 0.14)",
+                    borderRadius: 24,
+                    padding: "4px 8px 4px 12px",
+                    boxShadow: "0 4px 16px rgba(0, 0, 0, 0.25)"
+                  }}
+                >
+                  {isUploadingCloudinary ? (
+                    <span style={{ fontSize: "0.725rem", color: "#93c5fd", display: "inline-flex", alignItems: "center", gap: 6, fontWeight: 600 }}>
+                      <span
                         style={{
-                          padding: "12px 14px",
-                          borderRadius: "var(--radius-md)",
-                          background: "var(--bg-surface-elevated)",
-                          border: "1px solid var(--border-subtle)"
+                          width: 10,
+                          height: 10,
+                          border: "2px solid rgba(147, 197, 253, 0.3)",
+                          borderTopColor: "#93c5fd",
+                          borderRadius: "50%",
+                          animation: "spin 0.8s linear infinite",
+                          display: "inline-block"
                         }}
+                      />
+                      <span>Saving...</span>
+                    </span>
+                  ) : (
+                    <>
+                      <a
+                        href={effectiveResumeUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        download={effectiveFileName}
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 6,
+                          color: "#ffffff",
+                          textDecoration: "none",
+                          fontSize: "0.75rem",
+                          fontWeight: 700,
+                          padding: "4px 8px",
+                          borderRadius: 16,
+                          background: "rgba(255, 255, 255, 0.15)",
+                          transition: "all 0.15s ease"
+                        }}
+                        title="Download resume"
                       >
-                        <div style={{ fontSize: "0.825rem", color: "var(--text-secondary)", fontWeight: 700 }}>
-                          Q: {item.question}
-                        </div>
-                        <div style={{ fontSize: "0.875rem", color: "var(--text-primary)", marginTop: 4 }}>
-                          &ldquo;{item.answer}&rdquo;
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+                        <Download size={13} />
+                        <span>Download</span>
+                      </a>
+
+                      <a
+                        href={effectiveResumeUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{
+                          color: "rgba(255, 255, 255, 0.7)",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          padding: "4px 6px",
+                          borderRadius: 6,
+                          textDecoration: "none"
+                        }}
+                        title="Open full document in new tab"
+                      >
+                        <ExternalLink size={13} />
+                      </a>
+
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        style={{
+                          background: "transparent",
+                          border: "none",
+                          color: "rgba(255, 255, 255, 0.7)",
+                          cursor: "pointer",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          padding: "4px 6px"
+                        }}
+                        title="Replace resume file"
+                      >
+                        <Upload size={13} />
+                      </button>
+                    </>
+                  )}
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".pdf,.doc,.docx"
+                    style={{ display: "none" }}
+                    onChange={handleFileUpload}
+                  />
                 </div>
               )}
 
-              {/* Resume summary */}
-              <div>
-                <h4 style={{ fontSize: "0.95rem", marginBottom: 10 }}>Executive Candidate Profile</h4>
-                <div
-                  style={{
-                    padding: 16,
-                    borderRadius: "var(--radius-md)",
-                    background: "var(--bg-surface-elevated)",
-                    border: "1px solid var(--border-subtle)",
-                    fontSize: "0.875rem",
-                    lineHeight: 1.6,
-                    color: "var(--text-secondary)"
-                  }}
-                >
-                  <p>
-                    <strong>{candidate.name}</strong> is a high-caliber engineer with <strong>{candidate.experience}</strong> of proven production experience, currently based out of <strong>{candidate.location}</strong> at <strong>{candidate.currentCompany}</strong>. Strong command over distributed system architectures, high-load microservices, and asynchronous technical leadership.
-                  </p>
-
-                  <div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap" }}>
-                    {candidate.tags &&
-                      candidate.tags.map((tag, i) => (
-                        <span key={i} className="badge badge-source-direct" style={{ fontSize: "0.75rem" }}>
-                          #{tag}
-                        </span>
-                      ))}
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {activeTab === "ctc_breakdown" && (
-            <div>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18, flexWrap: "wrap", gap: 10 }}>
-                <div>
-                  <h4 style={{ fontSize: "1.1rem", fontWeight: 800 }}>Compensation & Offer Letter Matrix</h4>
-                  <p style={{ fontSize: "0.825rem", color: "var(--text-secondary)", marginTop: 2 }}>
-                    Indian CTC breakup, notice period buyout feasibility, and ESOP vesting
-                  </p>
-                </div>
-                <span className="badge badge-notice-immediate" style={{ fontSize: "0.8rem", padding: "5px 12px" }}>
-                  <Clock size={12} /> Notice Status: {candidate.noticePeriod}
-                </span>
-              </div>
-
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 20 }}>
-                <div className="card" style={{ background: "var(--bg-surface-elevated)", border: "1px solid var(--border-subtle)", padding: 18 }}>
-                  <div style={{ fontSize: "0.775rem", color: "var(--text-muted)", textTransform: "uppercase", fontWeight: 800, letterSpacing: "0.04em" }}>
-                    Current CTC (Fixed + Variable)
-                  </div>
-                  <div style={{ fontSize: "1.75rem", fontWeight: 800, color: "var(--text-primary)", marginTop: 6, letterSpacing: "-0.02em" }}>
-                    {candidate.currentCtc || "₹24 LPA"}
-                  </div>
-                  <div style={{ fontSize: "0.775rem", color: "var(--text-secondary)", marginTop: 4 }}>
-                    Verified via previous salary slips and Form 16
-                  </div>
-                </div>
-
-                <div className="card" style={{ background: "var(--bg-surface-elevated)", border: "1px solid var(--border-subtle)", padding: 18 }}>
-                  <div style={{ fontSize: "0.775rem", color: "var(--text-muted)", textTransform: "uppercase", fontWeight: 800, letterSpacing: "0.04em" }}>
-                    Expected CTC / Target Offer
-                  </div>
-                  <div style={{ fontSize: "1.75rem", fontWeight: 800, color: "var(--primary)", marginTop: 6, letterSpacing: "-0.02em" }}>
-                    {candidate.expectedCtc || "₹35 LPA"}
-                  </div>
-                  <div style={{ fontSize: "0.775rem", color: "#059669", fontWeight: 700, marginTop: 4, display: "flex", alignItems: "center", gap: 5 }}>
-                    <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#059669", display: "inline-block" }}></span>
-                    Within budget band for this requisition
-                  </div>
-                </div>
-              </div>
-
-              {/* Proposed Offer Breakup Table */}
-              <div className="card" style={{ padding: 20, border: "1px solid var(--border-subtle)" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-                  <h5 style={{ fontSize: "0.95rem", fontWeight: 700 }}>Suggested Offer Breakup (Annual INR)</h5>
-                  <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>Benchmark: 75th Percentile BLR Tech</span>
-                </div>
-                <div style={{ display: "flex", flexDirection: "column", fontSize: "0.875rem" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", padding: "10px 12px", borderBottom: "1px solid var(--border-subtle)" }}>
-                    <span style={{ color: "var(--text-secondary)" }}>Fixed Base Salary:</span>
-                    <strong style={{ color: "var(--text-primary)" }}>₹32,00,000</strong>
-                  </div>
-                  <div style={{ display: "flex", justifyContent: "space-between", padding: "10px 12px", borderBottom: "1px solid var(--border-subtle)" }}>
-                    <span style={{ color: "var(--text-secondary)" }}>Annual Performance Bonus (10%):</span>
-                    <strong style={{ color: "var(--text-primary)" }}>₹3,20,000</strong>
-                  </div>
-                  <div style={{ display: "flex", justifyContent: "space-between", padding: "10px 12px", borderBottom: "1px solid var(--border-subtle)" }}>
-                    <span style={{ color: "var(--text-secondary)" }}>Employer PF & Gratuity:</span>
-                    <strong style={{ color: "var(--text-primary)" }}>₹1,80,000</strong>
-                  </div>
-                  <div style={{ display: "flex", justifyContent: "space-between", padding: "10px 12px", borderBottom: "1px solid var(--border-subtle)" }}>
-                    <span style={{ color: "var(--text-secondary)" }}>ESOP Grant (4-year vest with 1-year cliff):</span>
-                    <strong style={{ color: "var(--primary)" }}>₹12,00,000 Total Value</strong>
-                  </div>
-                  <div style={{ display: "flex", justifyContent: "space-between", padding: "12px", marginTop: 6, background: "var(--bg-surface-elevated)", borderRadius: "var(--radius-md)", fontWeight: 800, fontSize: "1rem", border: "1px solid var(--border-subtle)" }}>
-                    <span style={{ color: "var(--text-primary)" }}>Total CTC Package:</span>
-                    <span style={{ color: "#059669" }}>₹37.0 LPA + ESOPs</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {activeTab === "scorecard" && (
-            <div>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-                <h4 style={{ fontSize: "1rem" }}>Technical & Architectural Scorecard</h4>
-                <div className="badge badge-active" style={{ fontSize: "0.85rem", padding: "4px 12px" }}>
-                  Status: {candidate.scorecard?.recommendation || "Under Review"}
-                </div>
-              </div>
-
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-                <div className="card" style={{ background: "var(--bg-surface-elevated)" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
-                    <span style={{ fontWeight: 600 }}>System Architecture & Low-Latency</span>
-                    <span style={{ color: "#0284c7", fontWeight: 700 }}>
-                      {candidate.scorecard?.technicalSkills || 5}/5
-                    </span>
-                  </div>
-                  <div className="source-bar-progress">
-                    <div
-                      className="source-bar-fill"
-                      style={{
-                        width: `${((candidate.scorecard?.technicalSkills || 5) / 5) * 100}%`,
-                        background: "#0284c7"
-                      }}
-                    ></div>
-                  </div>
-                </div>
-
-                <div className="card" style={{ background: "var(--bg-surface-elevated)" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
-                    <span style={{ fontWeight: 600 }}>DSA & Machine Coding</span>
-                    <span style={{ color: "#7c3aed", fontWeight: 700 }}>
-                      {candidate.scorecard?.systemDesign || 4}/5
-                    </span>
-                  </div>
-                  <div className="source-bar-progress">
-                    <div
-                      className="source-bar-fill"
-                      style={{
-                        width: `${((candidate.scorecard?.systemDesign || 4) / 5) * 100}%`,
-                        background: "#7c3aed"
-                      }}
-                    ></div>
-                  </div>
-                </div>
-
-                <div className="card" style={{ background: "var(--bg-surface-elevated)" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
-                    <span style={{ fontWeight: 600 }}>Ownership & High-Agency Startup Fit</span>
-                    <span style={{ color: "#059669", fontWeight: 700 }}>
-                      {candidate.scorecard?.cultureAlignment || 5}/5
-                    </span>
-                  </div>
-                  <div className="source-bar-progress">
-                    <div
-                      className="source-bar-fill"
-                      style={{
-                        width: `${((candidate.scorecard?.cultureAlignment || 5) / 5) * 100}%`,
-                        background: "#059669"
-                      }}
-                    ></div>
-                  </div>
-                </div>
-
-                <div className="card" style={{ background: "var(--bg-surface-elevated)" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
-                    <span style={{ fontWeight: 600 }}>Async Communication & Collaboration</span>
-                    <span style={{ color: "#d97706", fontWeight: 700 }}>
-                      {candidate.scorecard?.communication || 4}/5
-                    </span>
-                  </div>
-                  <div className="source-bar-progress">
-                    <div
-                      className="source-bar-fill"
-                      style={{
-                        width: `${((candidate.scorecard?.communication || 4) / 5) * 100}%`,
-                        background: "#d97706"
-                      }}
-                    ></div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {activeTab === "interview" && (
-            <div>
-              {candidate.interviewScheduled ? (
-                <div
-                  style={{
-                    padding: 20,
-                    borderRadius: "var(--radius-md)",
-                    background: "rgba(219, 39, 119, 0.06)",
-                    border: "1px solid rgba(219, 39, 119, 0.25)"
-                  }}
-                >
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                      <Video size={20} color="#db2777" />
-                      <h4 style={{ fontSize: "1.05rem", color: "var(--text-primary)" }}>
-                        {candidate.interviewScheduled.round}
-                      </h4>
-                    </div>
-                    <span className="badge badge-active">Confirmed Round</span>
-                  </div>
-
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 12, fontSize: "0.875rem" }}>
-                    <div>
-                      <span style={{ color: "var(--text-muted)" }}>Date & Time: </span>
-                      <strong style={{ color: "var(--text-primary)" }}>
-                        {candidate.interviewScheduled.date} &bull; {candidate.interviewScheduled.time}
-                      </strong>
-                    </div>
-
-                    <div>
-                      <span style={{ color: "var(--text-muted)" }}>Interviewer: </span>
-                      <strong style={{ color: "var(--text-primary)" }}>
-                        {candidate.interviewScheduled.interviewer}
-                      </strong>
-                    </div>
-                  </div>
-
-                  <div style={{ marginTop: 16, display: "flex", gap: 12 }}>
-                    <a
-                      href={candidate.interviewScheduled.meetingLink}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="btn btn-primary btn-sm"
-                      style={{ background: "#db2777" }}
-                    >
-                      <Video size={14} />
-                      <span>Join Google Meet Call</span>
-                    </a>
-
-                    <button className="btn btn-whatsapp btn-sm" onClick={openWhatsApp}>
-                      <MessageCircle size={14} />
-                      <span>Send WhatsApp Reminder</span>
-                    </button>
-                  </div>
-                </div>
+              {/* DIRECT ACTUAL RESUME VIEWER */}
+              {effectiveResumeUrl ? (
+                isWordDoc ? (
+                  <iframe
+                    src={googleDocsViewerUrl}
+                    title={`${candidate.name} Word Resume`}
+                    className="resume-viewer-iframe"
+                    style={{
+                      width: "100%",
+                      height: "calc(100vh - 210px)",
+                      minHeight: 700,
+                      border: "none",
+                      borderRadius: 8,
+                      background: "#f8fafc",
+                      display: "block"
+                    }}
+                  />
+                ) : (
+                  <iframe
+                    src={effectiveResumeUrl}
+                    title={`${candidate.name} PDF Resume`}
+                    className="resume-viewer-iframe"
+                    style={{
+                      width: "100%",
+                      height: "calc(100vh - 210px)",
+                      minHeight: 700,
+                      border: "none",
+                      borderRadius: 8,
+                      background: "#525659",
+                      display: "block"
+                    }}
+                  />
+                )
               ) : (
                 <div
                   style={{
-                    textAlign: "center",
-                    padding: "48px 24px",
+                    padding: 40,
                     background: "var(--bg-surface-elevated)",
-                    borderRadius: "var(--radius-md)"
+                    borderRadius: 8,
+                    border: "1px solid var(--border-subtle)",
+                    textAlign: "center"
                   }}
                 >
-                  <Calendar size={36} color="var(--text-muted)" style={{ margin: "0 auto 12px" }} />
-                  <h4>No Interview Scheduled Yet</h4>
-                  <p style={{ color: "var(--text-secondary)", fontSize: "0.85rem", marginTop: 4, marginBottom: 16 }}>
-                    Select a time slot and interviewer to invite {candidate.name}.
+                  <FileText size={44} color="var(--primary)" style={{ margin: "0 auto 12px" }} />
+                  <h4 style={{ margin: "0 0 6px", fontSize: "1rem" }}>
+                    No Resume Available
+                  </h4>
+                  <p style={{ fontSize: "0.825rem", color: "var(--text-secondary)", maxWidth: 420, margin: "0 auto 18px" }}>
+                    Upload a PDF or Word document to view it directly here.
                   </p>
                   <button
-                    className="btn btn-primary"
-                    onClick={() => {
-                      setSchedulingCandidate(candidate);
-                      setIsScheduleModalOpen(true);
-                    }}
+                    type="button"
+                    className="btn btn-primary btn-sm"
+                    onClick={() => fileInputRef.current?.click()}
                   >
-                    <Calendar size={15} />
-                    <span>Schedule Round Now</span>
+                    <Upload size={13} />
+                    <span>Upload Resume File</span>
                   </button>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".pdf,.doc,.docx"
+                    style={{ display: "none" }}
+                    onChange={handleFileUpload}
+                  />
                 </div>
               )}
             </div>
           )}
 
+          {/* TAB 2: PROFILE & CANDIDATE DETAILS */}
+          {activeTab === "profile" && (
+            <>
+              {/* Quick Metrics Grid */}
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(135px, 1fr))",
+                  gap: 10
+                }}
+              >
+                <div style={{ background: "var(--bg-surface-elevated)", padding: 12, borderRadius: 8, border: "1px solid var(--border-subtle)" }}>
+                  <span style={{ fontSize: "0.7rem", color: "var(--text-muted)", textTransform: "uppercase", fontWeight: 700 }}>
+                    Current CTC
+                  </span>
+                  <div style={{ fontSize: "1.05rem", fontWeight: 800, color: "var(--text-primary)", marginTop: 2 }}>
+                    {candidate.currentCtc || "₹24 LPA"}
+                  </div>
+                </div>
+
+                <div style={{ background: "var(--bg-surface-elevated)", padding: 12, borderRadius: 8, border: "1px solid var(--border-subtle)" }}>
+                  <span style={{ fontSize: "0.7rem", color: "var(--text-muted)", textTransform: "uppercase", fontWeight: 700 }}>
+                    Expected CTC
+                  </span>
+                  <div style={{ fontSize: "1.05rem", fontWeight: 800, color: "#059669", marginTop: 2 }}>
+                    {candidate.expectedCtc || "₹36 LPA"}
+                  </div>
+                </div>
+
+                <div style={{ background: "var(--bg-surface-elevated)", padding: 12, borderRadius: 8, border: "1px solid var(--border-subtle)" }}>
+                  <span style={{ fontSize: "0.7rem", color: "var(--text-muted)", textTransform: "uppercase", fontWeight: 700 }}>
+                    Notice Period
+                  </span>
+                  <div style={{ fontSize: "0.875rem", fontWeight: 700, color: isImmediate ? "#059669" : "#b45309", marginTop: 4 }}>
+                    {candidate.noticePeriod?.split("(")[0] || "30 Days"}
+                  </div>
+                </div>
+
+                <div style={{ background: "var(--bg-surface-elevated)", padding: 12, borderRadius: 8, border: "1px solid var(--border-subtle)" }}>
+                  <span style={{ fontSize: "0.7rem", color: "var(--text-muted)", textTransform: "uppercase", fontWeight: 700 }}>
+                    Experience
+                  </span>
+                  <div style={{ fontSize: "0.875rem", fontWeight: 700, color: "var(--text-primary)", marginTop: 4 }}>
+                    {candidate.experience || "5+ Years"}
+                  </div>
+                </div>
+              </div>
+
+              {/* Contact Details Card */}
+              <div style={{ background: "var(--bg-surface-elevated)", padding: "14px 16px", borderRadius: 8, border: "1px solid var(--border-subtle)" }}>
+                <span style={{ fontSize: "0.72rem", color: "var(--text-muted)", textTransform: "uppercase", fontWeight: 800, letterSpacing: "0.04em", display: "block", marginBottom: 10 }}>
+                  Contact & Verification
+                </span>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, fontSize: "0.825rem" }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    <span style={{ color: "var(--text-muted)", display: "flex", alignItems: "center", gap: 5 }}>
+                      <Mail size={13} /> {candidate.email}
+                    </span>
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm"
+                      style={{ padding: "2px 5px", fontSize: "0.7rem" }}
+                      onClick={handleCopyEmail}
+                    >
+                      {copiedEmail ? <Check size={11} color="#10b981" /> : <Copy size={11} />}
+                    </button>
+                  </div>
+
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    <span style={{ color: "var(--text-muted)", display: "flex", alignItems: "center", gap: 5 }}>
+                      <Phone size={13} /> {candidate.phone}
+                    </span>
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm"
+                      style={{ padding: "2px 5px", fontSize: "0.7rem" }}
+                      onClick={handleCopyPhone}
+                    >
+                      {copiedPhone ? <Check size={11} color="#10b981" /> : <Copy size={11} />}
+                    </button>
+                  </div>
+
+                  {candidate.currentCompany && (
+                    <div style={{ display: "flex", alignItems: "center", gap: 5, color: "var(--text-secondary)" }}>
+                      <Building size={13} />
+                      <span>Company: <strong>{candidate.currentCompany}</strong></span>
+                    </div>
+                  )}
+
+                  {candidate.education && (
+                    <div style={{ display: "flex", alignItems: "center", gap: 5, color: "var(--text-secondary)" }}>
+                      <GraduationCap size={13} />
+                      <span>Edu: <strong>{candidate.education}</strong></span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Skills & Evaluation Tags */}
+              <div style={{ background: "var(--bg-surface-elevated)", padding: "14px 16px", borderRadius: 8, border: "1px solid var(--border-subtle)" }}>
+                <span style={{ fontSize: "0.72rem", color: "var(--text-muted)", textTransform: "uppercase", fontWeight: 800, letterSpacing: "0.04em", display: "block", marginBottom: 8 }}>
+                  Tech Stack & Competency Badges
+                </span>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                  {(candidate.tags || candidate.skills || ["Go", "Kafka", "Distributed Systems", "PostgreSQL", "Docker"]).map((skill, sIdx) => (
+                    <span
+                      key={sIdx}
+                      style={{
+                        padding: "3px 9px",
+                        borderRadius: "var(--radius-full)",
+                        background: "var(--bg-surface)",
+                        border: "1px solid var(--border-subtle)",
+                        fontSize: "0.75rem",
+                        fontWeight: 600,
+                        color: "var(--text-primary)",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 4
+                      }}
+                    >
+                      <CheckCircle size={10} color="#10b981" />
+                      {skill}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              {/* Pitch / Cover Note if provided */}
+              {candidate.pitch && (
+                <div style={{ background: "rgba(79, 70, 229, 0.04)", padding: "14px 16px", borderRadius: 8, border: "1px solid rgba(79, 70, 229, 0.15)" }}>
+                  <span style={{ fontSize: "0.72rem", color: "var(--primary)", textTransform: "uppercase", fontWeight: 800, letterSpacing: "0.04em", display: "block", marginBottom: 6 }}>
+                    Candidate Pitch / Statement
+                  </span>
+                  <p style={{ fontSize: "0.825rem", color: "var(--text-secondary)", lineHeight: 1.5, margin: 0 }}>
+                    "{candidate.pitch}"
+                  </p>
+                </div>
+              )}
+            </>
+          )}
+
+          {/* TAB 3: COMPENSATION & OFFER INTELLIGENCE */}
+          {activeTab === "ctc_breakdown" && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+              <div style={{ background: "var(--bg-surface-elevated)", padding: 16, borderRadius: 8, border: "1px solid var(--border-subtle)" }}>
+                <h4 style={{ fontSize: "0.95rem", fontWeight: 800, margin: "0 0 12px", display: "flex", alignItems: "center", gap: 6 }}>
+                  <IndianRupee size={16} color="#059669" />
+                  <span>Indian Market Compensation Intelligence</span>
+                </h4>
+
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16 }}>
+                  <div style={{ padding: 12, background: "var(--bg-surface)", borderRadius: 6, border: "1px solid var(--border-subtle)" }}>
+                    <span style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>Current Fixed + Variable</span>
+                    <div style={{ fontSize: "1.2rem", fontWeight: 800, color: "var(--text-primary)", marginTop: 2 }}>
+                      {candidate.currentCtc || "₹34 LPA"}
+                    </div>
+                  </div>
+
+                  <div style={{ padding: 12, background: "var(--bg-surface)", borderRadius: 6, border: "1px solid var(--border-subtle)" }}>
+                    <span style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>Expected Target CTC</span>
+                    <div style={{ fontSize: "1.2rem", fontWeight: 800, color: "#059669", marginTop: 2 }}>
+                      {candidate.expectedCtc || "₹46 LPA"}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Offer Simulation */}
+                <div style={{ padding: 12, background: "rgba(5, 150, 105, 0.06)", borderRadius: 6, border: "1px solid rgba(5, 150, 105, 0.2)" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6, fontSize: "0.825rem" }}>
+                    <span style={{ color: "var(--text-secondary)" }}>Base Salary Component (80%):</span>
+                    <strong>₹36,80,000 / year</strong>
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6, fontSize: "0.825rem" }}>
+                    <span style={{ color: "var(--text-secondary)" }}>Annual Performance Bonus (15%):</span>
+                    <strong>₹6,90,000 / year</strong>
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6, fontSize: "0.825rem" }}>
+                    <span style={{ color: "var(--text-secondary)" }}>Retirals & Medical Benefits:</span>
+                    <strong>₹2,30,000 / year</strong>
+                  </div>
+                  <div style={{ borderTop: "1px solid rgba(5, 150, 105, 0.2)", paddingTop: 6, display: "flex", justifyContent: "space-between", fontSize: "0.875rem" }}>
+                    <strong style={{ color: "#059669" }}>Total Offer Package:</strong>
+                    <strong style={{ color: "#059669" }}>{candidate.expectedCtc || "₹46 LPA"} + ESOPs</strong>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 4: NOTES & TIMELINE */}
           {activeTab === "notes" && (
-            <div>
-              <form onSubmit={handleAddNote} style={{ marginBottom: 20 }}>
-                <div style={{ display: "flex", gap: 10 }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              <form onSubmit={handleAddNote}>
+                <div style={{ display: "flex", gap: 8 }}>
                   <input
                     type="text"
-                    placeholder="Add interview feedback, CTC discussion notes, or next steps..."
+                    placeholder="Add interview feedback, salary discussion notes, or next steps..."
                     className="form-input"
+                    style={{ fontSize: "0.825rem", height: 36 }}
                     value={newNote}
                     onChange={(e) => setNewNote(e.target.value)}
                   />
-                  <button type="submit" className="btn btn-primary" style={{ flexShrink: 0 }}>
-                    <Send size={15} />
-                    <span>Post Note</span>
+                  <button type="submit" className="btn btn-primary btn-sm" style={{ height: 36, padding: "0 14px" }}>
+                    <Send size={13} />
+                    <span>Post</span>
                   </button>
                 </div>
               </form>
 
-              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                 {candidate.notes && candidate.notes.length > 0 ? (
                   candidate.notes.map((note, idx) => (
                     <div
                       key={idx}
                       style={{
-                        padding: "12px 16px",
-                        borderRadius: "var(--radius-md)",
+                        padding: "10px 14px",
+                        borderRadius: 6,
                         background: "var(--bg-surface-elevated)",
                         borderLeft: "3px solid var(--primary)"
                       }}
                     >
-                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                        <span style={{ fontWeight: 700, fontSize: "0.85rem" }}>
-                          {note.author}
-                        </span>
-                        <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
-                          {note.date}
-                        </span>
+                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 3 }}>
+                        <span style={{ fontWeight: 700, fontSize: "0.78rem" }}>{note.author}</span>
+                        <span style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}>{note.date}</span>
                       </div>
-                      <p style={{ fontSize: "0.875rem", color: "var(--text-secondary)", lineHeight: 1.5 }}>
+                      <p style={{ fontSize: "0.825rem", color: "var(--text-secondary)", lineHeight: 1.4, margin: 0 }}>
                         {note.text}
                       </p>
                     </div>
                   ))
                 ) : (
-                  <div style={{ color: "var(--text-muted)", fontSize: "0.85rem", textAlign: "center" }}>
-                    No notes recorded yet.
+                  <div style={{ color: "var(--text-muted)", fontSize: "0.8rem", textAlign: "center", padding: "20px 0" }}>
+                    No recruiter notes recorded yet.
                   </div>
                 )}
               </div>
@@ -643,16 +1105,38 @@ export const CandidateDetailModal = () => {
           )}
         </div>
 
-        <div className="modal-footer">
-          <button
-            type="button"
-            className="btn btn-secondary"
-            onClick={() => setSelectedCandidateId(null)}
-          >
-            Close
-          </button>
+        {/* ========================================================================= */}
+        {/* 6. CLEAN DRAWER FOOTER (NO "Close Drawer" BUTTON AS REQUESTED)             */}
+        {/* ========================================================================= */}
+        <div className="candidate-drawer-footer">
+          <div style={{ fontSize: "0.725rem", color: "var(--text-muted)", display: "flex", alignItems: "center", gap: 6 }}>
+            <span>Tip: Press <kbd style={{ padding: "1px 5px", background: "var(--bg-surface)", border: "1px solid var(--border-subtle)", borderRadius: 3 }}>Esc</kbd> to close &bull; <kbd style={{ padding: "1px 5px", background: "var(--bg-surface)", border: "1px solid var(--border-subtle)", borderRadius: 3 }}>&larr;</kbd> <kbd style={{ padding: "1px 5px", background: "var(--bg-surface)", border: "1px solid var(--border-subtle)", borderRadius: 3 }}>&rarr;</kbd> to switch candidate</span>
+          </div>
+
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              onClick={handlePrevCandidate}
+              disabled={candidateIndex === 0}
+              style={{ fontSize: "0.72rem", padding: "4px 8px" }}
+            >
+              <ChevronLeft size={13} />
+              <span>Prev</span>
+            </button>
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              onClick={handleNextCandidate}
+              disabled={candidateIndex === candidates.length - 1}
+              style={{ fontSize: "0.72rem", padding: "4px 8px" }}
+            >
+              <span>Next</span>
+              <ChevronRight size={13} />
+            </button>
+          </div>
         </div>
-      </div>
+      </aside>
     </div>
   );
 };

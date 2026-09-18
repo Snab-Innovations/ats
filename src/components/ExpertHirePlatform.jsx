@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import { useAts } from "../context/AtsContext";
 import {
   Search,
@@ -33,12 +34,14 @@ import {
 } from "lucide-react";
 
 export const ExpertHirePlatform = () => {
+  const navigate = useNavigate();
   const {
     jobs = [],
     companies = [],
     company: activeCompany,
     addCandidate,
-    setActiveRole
+    currentUser,
+    uploadResumeFile
   } = useAts();
 
   // Active jobs from ALL companies
@@ -56,9 +59,11 @@ export const ExpertHirePlatform = () => {
 
   // Modals & Drawers
   const [selectedJobForDetail, setSelectedJobForDetail] = useState(null);
+  const [isApplyModalOpen, setIsApplyModalOpen] = useState(false);
   const [selectedJobForApply, setSelectedJobForApply] = useState(null);
   const [appliedSuccess, setAppliedSuccess] = useState(false);
   const [appliedCandidateName, setAppliedCandidateName] = useState("");
+  const [isUploadingResume, setIsUploadingResume] = useState(false);
 
   // Direct Application Form State (starts empty for candidate input)
   const emptyApplyForm = {
@@ -75,6 +80,7 @@ export const ExpertHirePlatform = () => {
     linkedinUrl: "",
     githubUrl: "",
     resumeFileName: "",
+    resumeUrl: "",
     answers: {},
     pitchNotes: ""
   };
@@ -229,9 +235,15 @@ export const ExpertHirePlatform = () => {
       expectedCtc: applyForm.expectedCtc,
       noticePeriod: applyForm.noticePeriod,
       education: applyForm.education,
-      resumeUrl: `https://experthire.io/resumes/${applyForm.name.replace(/\s+/g, "_")}_CV.pdf`,
-      resumeFileName: applyForm.resumeFileName || `${applyForm.name.replace(/\s+/g, "_")}_Resume.pdf`,
-      resumeFileSize: "185 KB",
+      resumeUrl:
+        applyForm.resumeUrl ||
+        `https://experthire.io/resumes/${applyForm.name.replace(/\s+/g, "_")}_CV.pdf`,
+      resumeSource: applyForm.resumeUrl?.includes("cloudinary.com")
+        ? "cloudinary_storage"
+        : "platform_upload",
+      resumeFileName:
+        applyForm.resumeFileName || `${applyForm.name.replace(/\s+/g, "_")}_Resume.pdf`,
+      resumeFileSize: applyForm.resumeFileSize || "185 KB",
       resumeSummary: `${applyForm.name} applied directly via the ExpertHire National Job Board for ${selectedJobForApply.title}. Experienced software professional with ${applyForm.experience} from ${applyForm.education}. Currently at ${applyForm.currentCompany || "Product Firm"}.`,
       tags: [
         "ExpertHire Platform",
@@ -258,6 +270,7 @@ export const ExpertHirePlatform = () => {
     <div className="experthire-platform-wrapper" style={{ background: "var(--bg-main)", minHeight: "100vh", color: "var(--text-primary)" }}>
       {/* Top Navbar */}
       <header
+        className="experthire-header"
         style={{
           background: "var(--bg-surface)",
           borderBottom: "1px solid var(--border-subtle)",
@@ -268,6 +281,7 @@ export const ExpertHirePlatform = () => {
         }}
       >
         <div
+          className="experthire-header-inner"
           style={{
             maxWidth: 1320,
             margin: "0 auto",
@@ -280,26 +294,26 @@ export const ExpertHirePlatform = () => {
           }}
         >
           {/* Logo & Platform Tagline */}
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <div
+          <div className="experthire-brand" style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <img
+              src="/logo-exhier.png"
+              alt="ExpertHier"
               style={{
-                width: 38,
-                height: 38,
-                borderRadius: 12,
-                background: "linear-gradient(135deg, #4f46e5 0%, #06b6d4 100%)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                color: "#fff",
-                boxShadow: "0 4px 14px rgba(79, 70, 229, 0.35)"
+                width: 52,
+                height: 52,
+                objectFit: "contain",
+                background: "transparent",
+                border: "none",
+                boxShadow: "none",
+                padding: 0,
+                mixBlendMode: "multiply",
+                flexShrink: 0
               }}
-            >
-              <Zap size={22} fill="#fff" />
-            </div>
+            />
             <div>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <span style={{ fontSize: "1.2rem", fontWeight: 800, letterSpacing: "-0.02em" }}>
-                  ExpertHire
+                <span style={{ fontSize: "1.3rem", fontWeight: 800, letterSpacing: "-0.02em" }}>
+                  ExpertHier
                 </span>
                 <span
                   style={{
@@ -316,90 +330,37 @@ export const ExpertHirePlatform = () => {
                   Direct Candidate Platform
                 </span>
               </div>
-              <div style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginTop: 1 }}>
+              <div className="experthire-tagline" style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginTop: 1 }}>
                 Unified tech requisitions across all verified employer scaleups
               </div>
             </div>
           </div>
 
-          {/* Platform Live Counters */}
-          <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 6,
-                fontSize: "0.78rem",
-                background: "var(--bg-surface-elevated)",
-                padding: "6px 12px",
-                borderRadius: "var(--radius-full)",
-                border: "1px solid var(--border-subtle)"
-              }}
-            >
-              <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#10b981", boxShadow: "0 0 6px #10b981" }} />
-              <span><strong>{allActiveJobs.length}</strong> Active Openings</span>
-            </div>
-
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 6,
-                fontSize: "0.78rem",
-                background: "var(--bg-surface-elevated)",
-                padding: "6px 12px",
-                borderRadius: "var(--radius-full)",
-                border: "1px solid var(--border-subtle)"
-              }}
-            >
-              <Building2 size={13} color="var(--primary)" />
-              <span><strong>{companies.length}</strong> Partner Scaleups</span>
-            </div>
-
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 6,
-                fontSize: "0.78rem",
-                background: "rgba(16, 185, 129, 0.08)",
-                color: "#059669",
-                padding: "6px 12px",
-                borderRadius: "var(--radius-full)",
-                border: "1px solid rgba(16, 185, 129, 0.25)",
-                fontWeight: 600
-              }}
-            >
-              <ShieldCheck size={14} />
-              <span>Direct ATS Delivery</span>
-            </div>
-          </div>
-
-          {/* Quick Switch Links */}
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          {/* Quick Nav Actions */}
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <button
+              type="button"
               className="btn btn-ghost btn-sm"
-              style={{ fontSize: "0.775rem", padding: "6px 10px" }}
-              onClick={() => setActiveRole("company_admin")}
-              title="Switch to Employer ATS Admin Console"
+              onClick={() => navigate("/")}
+              style={{ fontSize: "0.82rem", color: "var(--text-secondary)", fontWeight: 600 }}
             >
-              <Building2 size={13} />
-              <span>Employer ATS</span>
+              &larr; Home
             </button>
             <button
-              className="btn btn-primary btn-sm"
-              style={{
-                fontSize: "0.775rem",
-                padding: "6px 12px",
-                background: "linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)",
-                border: "none",
-                boxShadow: "0 2px 8px rgba(79, 70, 229, 0.3)"
-              }}
-              onClick={() => setActiveRole("agency_portal")}
-              title="Agency Placement Partner Portal"
+              type="button"
+              className="btn btn-outline btn-sm"
+              onClick={() => navigate("/career-site/snab")}
+              style={{ fontSize: "0.82rem", fontWeight: 600 }}
             >
-              <Award size={13} />
-              <span>Agency Portal</span>
+              SNAB Jobs
+            </button>
+            <button
+              type="button"
+              className="btn btn-primary btn-sm"
+              onClick={() => navigate("/login")}
+              style={{ fontSize: "0.82rem", fontWeight: 700, background: "#4f46e5" }}
+            >
+              Workspace Login
             </button>
           </div>
         </div>
@@ -407,6 +368,7 @@ export const ExpertHirePlatform = () => {
 
       {/* Hero Banner with Integrated Search */}
       <section
+        className="experthire-hero-section"
         style={{
           background: "linear-gradient(180deg, var(--bg-surface) 0%, var(--bg-main) 100%)",
           padding: "44px 24px 32px",
@@ -415,6 +377,7 @@ export const ExpertHirePlatform = () => {
       >
         <div style={{ maxWidth: 1100, margin: "0 auto", textAlign: "center" }}>
           <div
+            className="experthire-hero-badge"
             style={{
               display: "inline-flex",
               alignItems: "center",
@@ -430,12 +393,13 @@ export const ExpertHirePlatform = () => {
             }}
           >
             <Sparkles size={14} />
-            <span>Apply Directly to Hiring Teams Across India &bull; Direct ATS Attribution</span>
+            <span>Direct Employer Applications &bull; Fast Review</span>
           </div>
 
           <h1
+            className="experthire-hero-title"
             style={{
-              fontSize: "2.35rem",
+              fontSize: "clamp(1.6rem, 5.5vw, 2.35rem)",
               fontWeight: 900,
               letterSpacing: "-0.03em",
               lineHeight: 1.2,
@@ -457,18 +421,19 @@ export const ExpertHirePlatform = () => {
 
           <p
             style={{
-              fontSize: "0.98rem",
+              fontSize: "0.95rem",
               color: "var(--text-secondary)",
-              maxWidth: 680,
-              margin: "0 auto 28px",
-              lineHeight: 1.55
+              maxWidth: 620,
+              margin: "0 auto 24px",
+              lineHeight: 1.6
             }}
           >
-            Explore verified engineering, cloud, and security positions at BharatScale Cloud, ZeptoLabs, Razorpay Infra, and premier scaleups. Every application is tracked in the employer's ATS as <strong>Source: ExpertHire Platform</strong>.
+            Find active technical roles and apply directly to hiring teams with zero middleman delays.
           </p>
 
           {/* Unified Multi-Filter Search Bar */}
           <div
+            className="experthire-search-grid"
             style={{
               background: "var(--bg-surface)",
               borderRadius: "16px",
@@ -476,7 +441,6 @@ export const ExpertHirePlatform = () => {
               boxShadow: "0 14px 38px rgba(0, 0, 0, 0.08)",
               border: "1px solid var(--border-medium)",
               display: "grid",
-              gridTemplateColumns: "2.2fr 1fr 1fr 1fr auto",
               gap: 12,
               alignItems: "center"
             }}
@@ -616,6 +580,7 @@ export const ExpertHirePlatform = () => {
 
       {/* Featured Employers Banner */}
       <section
+        className="experthire-featured-section"
         style={{
           maxWidth: 1320,
           margin: "0 auto",
@@ -627,7 +592,9 @@ export const ExpertHirePlatform = () => {
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
-            marginBottom: 12
+            marginBottom: 12,
+            flexWrap: "wrap",
+            gap: 8
           }}
         >
           <span style={{ fontSize: "0.8rem", fontWeight: 700, color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: "0.04em" }}>
@@ -638,7 +605,7 @@ export const ExpertHirePlatform = () => {
           </span>
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 14 }}>
+        <div className="experthire-featured-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 260px), 1fr))", gap: 14 }}>
           {companies.map((c) => {
             const companyJobs = allActiveJobs.filter(
               (j) => (j.companyId ? j.companyId === c.id : activeCompany?.id === c.id)
@@ -726,6 +693,7 @@ export const ExpertHirePlatform = () => {
 
       {/* Main Jobs Feed */}
       <main
+        className="experthire-main-feed"
         style={{
           maxWidth: 1320,
           margin: "0 auto",
@@ -750,7 +718,7 @@ export const ExpertHirePlatform = () => {
                 : "Active Tech Requisitions Across All Companies"}
             </h2>
             <div style={{ fontSize: "0.8rem", color: "var(--text-secondary)", marginTop: 2 }}>
-              Showing <strong>{filteredJobs.length}</strong> active position{filteredJobs.length === 1 ? "" : "s"} &bull; Direct application tagged to <strong>ExpertHire Platform</strong>
+              Showing <strong>{filteredJobs.length}</strong> active position{filteredJobs.length === 1 ? "" : "s"} &bull; Direct application
             </div>
           </div>
 
@@ -779,7 +747,23 @@ export const ExpertHirePlatform = () => {
         </div>
 
         {/* Jobs Grid */}
-        {filteredJobs.length === 0 ? (
+        {allActiveJobs.length === 0 ? (
+          <div
+            style={{
+              textAlign: "center",
+              padding: "70px 24px",
+              background: "var(--bg-surface)",
+              borderRadius: "16px",
+              border: "1px dashed var(--border-subtle)"
+            }}
+          >
+            <Briefcase size={46} color="var(--text-muted)" style={{ margin: "0 auto 14px", opacity: 0.5 }} />
+            <h3 style={{ fontSize: "1.25rem", fontWeight: 800, margin: "0 0 8px" }}>No Active Openings Published Yet</h3>
+            <p style={{ fontSize: "0.88rem", color: "var(--text-secondary)", maxWidth: 460, margin: "0 auto 20px", lineHeight: 1.5 }}>
+              Verified employer scaleups will publish real-time technical requisitions here. Check back soon or visit our employer dashboard to publish roles.
+            </p>
+          </div>
+        ) : filteredJobs.length === 0 ? (
           <div
             style={{
               textAlign: "center",
@@ -809,7 +793,7 @@ export const ExpertHirePlatform = () => {
             </button>
           </div>
         ) : (
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(400px, 1fr))", gap: 20 }}>
+          <div className="experthire-jobs-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 340px), 1fr))", gap: 20 }}>
             {filteredJobs.map((job) => {
               const jobCompany =
                 companies.find((c) => c.id === job.companyId) || activeCompany;
@@ -1278,7 +1262,7 @@ export const ExpertHirePlatform = () => {
                     }}
                   >
                     <Zap size={12} fill="#4f46e5" />
-                    <span>Source: ExpertHire Platform</span>
+                    <span>Direct Application</span>
                   </span>
                 </div>
               </div>
@@ -1670,30 +1654,54 @@ export const ExpertHirePlatform = () => {
                               <div style={{ fontSize: "0.825rem", fontWeight: 700, color: "var(--text-primary)" }}>
                                 {applyForm.resumeFileName}
                               </div>
-                              <div style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}>
-                                Attached Document &bull; Verified Candidate File
+                              <div style={{ fontSize: "0.7rem", color: "var(--text-muted)", display: "flex", alignItems: "center", gap: 6, marginTop: 2 }}>
+                                <span>Attached Document</span>
+                                {applyForm.resumeUrl?.includes("cloudinary.com") && (
+                                  <span style={{ color: "#2563eb", fontWeight: 600 }}>
+                                    &bull; Cloudinary Hosted (resumes)
+                                  </span>
+                                )}
                               </div>
                             </div>
                           </div>
 
                           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                            <span
-                              style={{
-                                fontSize: "0.725rem",
-                                fontWeight: 700,
-                                color: "#059669",
-                                background: "#ecfdf5",
-                                padding: "3px 8px",
-                                borderRadius: "var(--radius-full)"
-                              }}
-                            >
-                              Ready
-                            </span>
+                            {applyForm.resumeUrl ? (
+                              <a
+                                href={applyForm.resumeUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                style={{
+                                  fontSize: "0.725rem",
+                                  fontWeight: 700,
+                                  color: "#2563eb",
+                                  background: "rgba(37, 99, 235, 0.08)",
+                                  padding: "3px 8px",
+                                  borderRadius: "var(--radius-full)",
+                                  textDecoration: "none"
+                                }}
+                              >
+                                View File
+                              </a>
+                            ) : (
+                              <span
+                                style={{
+                                  fontSize: "0.725rem",
+                                  fontWeight: 700,
+                                  color: "#059669",
+                                  background: "#ecfdf5",
+                                  padding: "3px 8px",
+                                  borderRadius: "var(--radius-full)"
+                                }}
+                              >
+                                Ready
+                              </span>
+                            )}
                             <button
                               type="button"
                               className="btn btn-ghost btn-sm"
                               style={{ fontSize: "0.725rem", padding: "3px 8px", color: "var(--text-muted)" }}
-                              onClick={() => setApplyForm({ ...applyForm, resumeFileName: "" })}
+                              onClick={() => setApplyForm({ ...applyForm, resumeFileName: "", resumeUrl: "" })}
                             >
                               Remove
                             </button>
@@ -1711,24 +1719,67 @@ export const ExpertHirePlatform = () => {
                             alignItems: "center",
                             justifyContent: "center",
                             gap: 6,
-                            cursor: "pointer",
-                            transition: "all 0.15s ease"
+                            cursor: isUploadingResume ? "not-allowed" : "pointer",
+                            transition: "all 0.15s ease",
+                            opacity: isUploadingResume ? 0.7 : 1
                           }}
                         >
-                          <Upload size={22} color="var(--primary)" />
-                          <span style={{ fontSize: "0.825rem", fontWeight: 700, color: "var(--text-primary)" }}>
-                            Upload Resume (PDF or DOCX up to 10MB)
-                          </span>
-                          <span style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>
-                            Click to browse from your device or drop file here
-                          </span>
+                          {isUploadingResume ? (
+                            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
+                              <span
+                                style={{
+                                  width: 22,
+                                  height: 22,
+                                  border: "2px solid rgba(79, 70, 229, 0.3)",
+                                  borderTopColor: "var(--primary)",
+                                  borderRadius: "50%",
+                                  animation: "spin 0.8s linear infinite",
+                                  display: "inline-block"
+                                }}
+                              />
+                              <span style={{ fontSize: "0.825rem", fontWeight: 600, color: "var(--primary)" }}>
+                                Uploading resume to Cloudinary (ljelkpy4)...
+                              </span>
+                            </div>
+                          ) : (
+                            <>
+                              <Upload size={22} color="var(--primary)" />
+                              <span style={{ fontSize: "0.825rem", fontWeight: 700, color: "var(--text-primary)" }}>
+                                Upload Resume (PDF or DOCX up to 10MB)
+                              </span>
+                              <span style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>
+                                Click to browse & upload directly to Cloudinary (preset: resumes)
+                              </span>
+                            </>
+                          )}
                           <input
                             type="file"
                             accept=".pdf,.doc,.docx"
+                            disabled={isUploadingResume}
                             style={{ display: "none" }}
-                            onChange={(e) => {
+                            onChange={async (e) => {
                               if (e.target.files && e.target.files[0]) {
-                                setApplyForm({ ...applyForm, resumeFileName: e.target.files[0].name });
+                                const file = e.target.files[0];
+                                setApplyForm((prev) => ({
+                                  ...prev,
+                                  resumeFileName: file.name,
+                                  resumeFileSize: `${(file.size / 1024).toFixed(0)} KB`
+                                }));
+                                setIsUploadingResume(true);
+                                try {
+                                  const res = await uploadResumeFile(file);
+                                  if (res?.success && res?.url) {
+                                    setApplyForm((prev) => ({
+                                      ...prev,
+                                      resumeUrl: res.url,
+                                      resumeFileName: file.name
+                                    }));
+                                  }
+                                } catch (uErr) {
+                                  console.warn("Cloudinary upload failed:", uErr);
+                                } finally {
+                                  setIsUploadingResume(false);
+                                }
                               }
                             }}
                           />
@@ -2210,24 +2261,24 @@ export const ExpertHirePlatform = () => {
           }}
         >
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <div
+            <img
+              src="/logo-exhier.png"
+              alt="ExpertHier"
               style={{
-                width: 30,
-                height: 30,
-                borderRadius: 8,
-                background: "linear-gradient(135deg, #4f46e5 0%, #06b6d4 100%)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                color: "#fff",
-                fontWeight: 900
+                width: 40,
+                height: 40,
+                objectFit: "contain",
+                background: "transparent",
+                border: "none",
+                boxShadow: "none",
+                padding: 0,
+                mixBlendMode: "multiply",
+                flexShrink: 0
               }}
-            >
-              <Zap size={16} fill="#fff" />
-            </div>
+            />
             <div>
               <span style={{ fontWeight: 800, fontSize: "0.95rem", color: "var(--text-primary)" }}>
-                ExpertHire Platform
+                ExpertHier Platform
               </span>
               <span style={{ fontSize: "0.75rem", color: "var(--text-muted)", display: "block" }}>
                 National Tech Talent Engine &bull; Multi-Tenant ATS Integration

@@ -29,7 +29,12 @@ import {
   ChevronRight,
   ReceiptText,
   DollarSign,
-  Building2
+  Building2,
+  Settings,
+  LogOut,
+  Camera,
+  Save,
+  MapPin
 } from "lucide-react";
 
 export const AgencyPortal = () => {
@@ -44,16 +49,125 @@ export const AgencyPortal = () => {
     activeAgency,
     addCandidate,
     addBulkCandidates,
-    setActiveRole
+    setActiveRole,
+    uploadResumeFile,
+    updateAgency,
+    addAgency,
+    logout,
+    uploadImageToCloudinary
   } = useAts();
 
-  // Active Tab: 'mandates' | 'bulk_upload' | 'pipeline' | 'payouts' | 'duplicate_check'
+  // Active Tab: 'mandates' | 'bulk_upload' | 'pipeline' | 'payouts' | 'duplicate_check' | 'settings'
   const [activeTab, setActiveTab] = useState("mandates");
+
+  const agencyInitials = activeAgency?.name
+    ? activeAgency.name
+        .split(" ")
+        .map((w) => w[0])
+        .join("")
+        .toUpperCase()
+        .slice(0, 2)
+    : "AP";
+
+  // Agency Details & Settings State
+  const [agencyForm, setAgencyForm] = useState({
+    name: activeAgency?.name || "",
+    logoUrl: activeAgency?.logoUrl || activeAgency?.logo || "",
+    primaryContact: activeAgency?.primaryContact || "",
+    email: activeAgency?.email || "",
+    phone: activeAgency?.phone || "+91 ",
+    city: activeAgency?.city || "Bengaluru & Mumbai",
+    specialization: activeAgency?.specialization || "Technical Recruiting & Scaleups",
+    commissionRate: activeAgency?.commissionRate || "8.50% [Standard Retainer]",
+    portalCode: activeAgency?.portalCode || "",
+    portalPassword: activeAgency?.portalPassword || "Agency#2026!",
+    tier: activeAgency?.tier || "Elite Partner",
+    gstin: activeAgency?.gstin || ""
+  });
+  const [isUploadingLogo, setIsUploadingLogo] = useState(false);
+  const [isSavingSettings, setIsSavingSettings] = useState(false);
+  const [settingsSuccessMsg, setSettingsSuccessMsg] = useState("");
+
+  // Sync agencyForm only when activeAgency ID changes (prevents overwriting user inputs while editing)
+  React.useEffect(() => {
+    if (activeAgency) {
+      setAgencyForm({
+        name: activeAgency.name || "",
+        logoUrl: activeAgency.logoUrl || activeAgency.logo || "",
+        primaryContact: activeAgency.primaryContact || "",
+        email: activeAgency.email || "",
+        phone: activeAgency.phone || "+91 ",
+        city: activeAgency.city || "Bengaluru & Mumbai",
+        specialization: activeAgency.specialization || "Technical Recruiting & Scaleups",
+        commissionRate: activeAgency.commissionRate || activeAgency.commissionTier || "8.50% [Standard Retainer]",
+        portalCode: activeAgency.portalCode || "",
+        portalPassword: activeAgency.portalPassword || "Agency#2026!",
+        tier: activeAgency.tier || "Elite Partner",
+        gstin: activeAgency.gstin || ""
+      });
+    }
+  }, [activeAgency?.id]);
+
+  const handleLogoUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setIsUploadingLogo(true);
+    try {
+      const res = await uploadImageToCloudinary(file);
+      if (res?.success && res.url) {
+        setAgencyForm((prev) => ({ ...prev, logoUrl: res.url }));
+        if (activeAgency?.id) {
+          await updateAgency(activeAgency.id, { logoUrl: res.url, logo: res.url });
+        }
+      }
+    } catch (err) {
+      console.warn("Logo upload failed:", err);
+    } finally {
+      setIsUploadingLogo(false);
+      e.target.value = "";
+    }
+  };
+
+  const handleSaveAgencySettings = async (e) => {
+    e.preventDefault();
+    if (!agencyForm.name.trim()) return;
+
+    const cleanLogo = (agencyForm.logoUrl || "").trim();
+    setIsSavingSettings(true);
+
+    try {
+      const payload = {
+        ...agencyForm,
+        commissionRate: agencyForm.commissionRate,
+        commissionTier: agencyForm.commissionRate,
+        logoUrl: cleanLogo,
+        logo: cleanLogo
+      };
+
+      if (activeAgency && activeAgency.id) {
+        await updateAgency(activeAgency.id, payload);
+      } else {
+        const created = await addAgency(payload);
+        if (created?.id) {
+          setSelectedAgencyId(created.id);
+        }
+      }
+
+      setSettingsSuccessMsg("Agency details saved successfully!");
+      setTimeout(() => setSettingsSuccessMsg(""), 3500);
+    } catch (err) {
+      console.error("Failed to save agency settings:", err);
+      alert("Failed to save agency details: " + (err.message || err));
+    } finally {
+      setIsSavingSettings(false);
+    }
+  };
 
   // Single candidate modal state
   const [isSubmitModalOpen, setIsSubmitModalOpen] = useState(false);
   const [selectedJobToSubmit, setSelectedJobToSubmit] = useState(null);
   const [submittedSuccess, setSubmittedSuccess] = useState(false);
+  const [isUploadingSingleResume, setIsUploadingSingleResume] = useState(false);
 
   // Job Spec Drawer State
   const [specJob, setSpecJob] = useState(null);
@@ -70,6 +184,10 @@ export const AgencyPortal = () => {
   // Search in submissions
   const [searchSubmissions, setSearchSubmissions] = useState("");
   const [filterStage, setFilterStage] = useState("all");
+  const [filterSubmissionCompany, setFilterSubmissionCompany] = useState("all");
+  const [filterSubmissionJob, setFilterSubmissionJob] = useState("all");
+  const [filterSubmissionTime, setFilterSubmissionTime] = useState("all");
+  const [filterSubmissionNotice, setFilterSubmissionNotice] = useState("all");
 
   // Single Candidate Form
   const [candidateForm, setCandidateForm] = useState({
@@ -79,10 +197,12 @@ export const AgencyPortal = () => {
     location: "Bengaluru, Karnataka",
     experience: "5 years",
     currentCompany: "",
-    currentCtc: "₹24 LPA",
-    expectedCtc: "₹34 LPA",
-    noticePeriod: "Immediate Joiner (Serving / Relieved)",
-    education: "B.Tech CSE",
+    currentCtc: "",
+    expectedCtc: "",
+    noticePeriod: "Immediate Joiner",
+    education: "",
+    resumeFileName: "",
+    resumeUrl: "",
     resumeSummary: "",
     agencyNotes: "",
     answers: {}
@@ -93,31 +213,17 @@ export const AgencyPortal = () => {
   const [bulkRows, setBulkRows] = useState([
     {
       id: 1,
-      name: "Rohan Deshmukh",
-      email: "rohan.deshmukh@gmail.com",
-      phone: "+91 98201 88492",
-      currentCompany: "Swiggy / Instamart",
-      experience: "6 yrs",
-      currentCtc: "₹28 LPA",
-      expectedCtc: "₹38 LPA",
-      noticePeriod: "15 Days Notice",
-      education: "BITS Pilani",
-      resumeFileName: "Rohan_Deshmukh_Resume.pdf",
-      resumeFileSize: "142 KB"
-    },
-    {
-      id: 2,
-      name: "Neha Kulkarni",
-      email: "neha.kulkarni@gmail.com",
-      phone: "+91 98450 77123",
-      currentCompany: "Flipkart Commerce",
-      experience: "5 yrs",
-      currentCtc: "₹24 LPA",
-      expectedCtc: "₹34 LPA",
+      name: "",
+      email: "",
+      phone: "+91 ",
+      currentCompany: "",
+      experience: "",
+      currentCtc: "",
+      expectedCtc: "",
       noticePeriod: "Immediate Joiner",
-      education: "IIT Roorkee",
-      resumeFileName: "Neha_Kulkarni_CV.pdf",
-      resumeFileSize: "168 KB"
+      education: "",
+      resumeFileName: "",
+      resumeFileSize: ""
     }
   ]);
   const [bulkSubmittedSuccess, setBulkSubmittedSuccess] = useState(false);
@@ -126,10 +232,13 @@ export const AgencyPortal = () => {
   // Invoice modal state
   const [isInvoiceModalOpen, setIsInvoiceModalOpen] = useState(false);
 
-  // Active syndicated jobs from ALL companies that sent jobs to agencies and are active
-  const syndicatedJobs = jobs.filter(
-    (j) => j.syndicateToAgencies && j.status === "active"
-  );
+  // Active syndicated jobs from companies that have NOT blocked this agency
+  const syndicatedJobs = jobs.filter((j) => {
+    if (!j.syndicateToAgencies || j.status !== "active") return false;
+    const jobCompId = j.companyId || company.id;
+    const isBlocked = (activeAgency?.blockedCompanyIds || []).includes(jobCompId);
+    return !isBlocked;
+  });
 
   // Filter submissions by active agency across all client companies
   const mySubmissions = candidates.filter(
@@ -227,6 +336,15 @@ export const AgencyPortal = () => {
       expectedCtc: candidateForm.expectedCtc,
       noticePeriod: candidateForm.noticePeriod,
       education: candidateForm.education,
+      resumeUrl:
+        candidateForm.resumeUrl ||
+        `https://res.cloudinary.com/ljelkpy4/raw/upload/${candidateForm.name.replace(/\s+/g, "_")}_Resume.pdf`,
+      resumeSource: candidateForm.resumeUrl?.includes("cloudinary.com")
+        ? "cloudinary_storage"
+        : "agency_portal",
+      resumeFileName:
+        candidateForm.resumeFileName || `${candidateForm.name.replace(/\s+/g, "_")}_Resume.pdf`,
+      resumeFileSize: candidateForm.resumeFileSize || "172 KB",
       tags: [
         "Agency Candidate",
         activeAgency?.name?.split(" ")[0] || "Agency",
@@ -292,6 +410,7 @@ export const AgencyPortal = () => {
     if (files.length === 0) return;
 
     const newRows = files.map((file, idx) => {
+      const rowId = Date.now() + idx;
       const cleanName = file.name
         .replace(/\.[^/.]+$/, "")
         .replace(/[_-]/g, " ")
@@ -299,8 +418,25 @@ export const AgencyPortal = () => {
         .trim();
       const generatedEmail = `${cleanName.toLowerCase().replace(/\s+/g, ".")}@gmail.com`;
 
+      // Upload each file to Cloudinary in background and attach permanent HTTPS URL
+      uploadResumeFile(file).then((res) => {
+        if (res?.success && res?.url) {
+          setBulkRows((current) =>
+            current.map((r) =>
+              r.id === rowId
+                ? {
+                    ...r,
+                    resumeUrl: res.url,
+                    resumeSource: "cloudinary_storage"
+                  }
+                : r
+            )
+          );
+        }
+      });
+
       return {
-        id: Date.now() + idx,
+        id: rowId,
         name: cleanName || `Candidate ${bulkRows.length + idx + 1}`,
         email: generatedEmail,
         phone: "+91 98201 " + Math.floor(10000 + Math.random() * 90000),
@@ -311,59 +447,12 @@ export const AgencyPortal = () => {
         noticePeriod: "15 Days Notice",
         education: "B.Tech / MCA",
         resumeFileName: file.name,
-        resumeFileSize: `${(file.size / 1024).toFixed(0)} KB`
+        resumeFileSize: `${(file.size / 1024).toFixed(0)} KB`,
+        resumeUrl: ""
       };
     });
 
     setBulkRows((prev) => [...prev, ...newRows]);
-  };
-
-  // Bulk: Load sample batch
-  const handleLoadSampleBatch = () => {
-    setBulkRows([
-      {
-        id: 101,
-        name: "Aakash Mehta",
-        email: "aakash.m@gmail.com",
-        phone: "+91 98201 11223",
-        currentCompany: "Ola Electric",
-        experience: "7 yrs",
-        currentCtc: "₹34 LPA",
-        expectedCtc: "₹46 LPA",
-        noticePeriod: "Immediate Joiner",
-        education: "IIT Delhi B.Tech",
-        resumeFileName: "Aakash_Mehta_IITD_CV.pdf",
-        resumeFileSize: "184 KB"
-      },
-      {
-        id: 102,
-        name: "Priyanka Nair",
-        email: "priyanka.nair@gmail.com",
-        phone: "+91 98112 44556",
-        currentCompany: "Zomato Core",
-        experience: "5 yrs",
-        currentCtc: "₹26 LPA",
-        expectedCtc: "₹36 LPA",
-        noticePeriod: "15 Days Notice",
-        education: "NIT Surathkal",
-        resumeFileName: "Priyanka_Nair_Zomato_Lead.pdf",
-        resumeFileSize: "210 KB"
-      },
-      {
-        id: 103,
-        name: "Karan Johar Sharma",
-        email: "karan.sharma@gmail.com",
-        phone: "+91 97110 88990",
-        currentCompany: "PhonePe Payments",
-        experience: "6 yrs",
-        currentCtc: "₹30 LPA",
-        expectedCtc: "₹42 LPA",
-        noticePeriod: "30 Days Notice",
-        education: "IIIT Hyderabad",
-        resumeFileName: "Karan_Sharma_PhonePe_CV.pdf",
-        resumeFileSize: "165 KB"
-      }
-    ]);
   };
 
   // Download CSV template
@@ -467,14 +556,44 @@ export const AgencyPortal = () => {
 
   // Filtered Submissions in Tracker
   const filteredSubmissions = mySubmissions.filter((c) => {
-    const q = searchSubmissions.toLowerCase();
+    const q = searchSubmissions.toLowerCase().trim();
     const matchesQ =
       !q ||
       c.name.toLowerCase().includes(q) ||
-      c.role.toLowerCase().includes(q) ||
-      c.email.toLowerCase().includes(q);
+      (c.role && c.role.toLowerCase().includes(q)) ||
+      (c.email && c.email.toLowerCase().includes(q)) ||
+      (c.phone && c.phone.toLowerCase().includes(q));
+
     const matchesStage = filterStage === "all" || c.stage === filterStage;
-    return matchesQ && matchesStage;
+
+    const matchesCompany =
+      filterSubmissionCompany === "all" || c.companyId === filterSubmissionCompany;
+
+    const matchesJob =
+      filterSubmissionJob === "all" ||
+      c.jobId === filterSubmissionJob ||
+      (c.role && c.role.toLowerCase() === filterSubmissionJob.toLowerCase());
+
+    // Time filter
+    let matchesTime = true;
+    if (filterSubmissionTime !== "all") {
+      const candidateDateStr = c.submittedAt || c.appliedDate || c.date;
+      if (!candidateDateStr) {
+        matchesTime = false;
+      } else {
+        const cDate = new Date(candidateDateStr);
+        if (!isNaN(cDate.getTime())) {
+          const diffDays = (new Date() - cDate) / (1000 * 60 * 60 * 24);
+          if (filterSubmissionTime === "today") matchesTime = diffDays <= 1;
+          else if (filterSubmissionTime === "7d") matchesTime = diffDays <= 7;
+          else if (filterSubmissionTime === "30d") matchesTime = diffDays <= 30;
+          else if (filterSubmissionTime === "90d") matchesTime = diffDays <= 90;
+          else if (filterSubmissionTime === "year") matchesTime = diffDays <= 365;
+        }
+      }
+    }
+
+    return matchesQ && matchesStage && matchesCompany && matchesJob && matchesTime;
   });
 
   return (
@@ -497,112 +616,40 @@ export const AgencyPortal = () => {
           }}
         >
           <div className="page-title-group">
-            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              {activeTab === "mandates" && <Briefcase size={22} color="#7c3aed" />}
-              {activeTab === "bulk_upload" && <FileSpreadsheet size={22} color="#059669" />}
-              {activeTab === "pipeline" && <Users2 size={22} color="#7c3aed" />}
-              {activeTab === "payouts" && <IndianRupee size={22} color="#059669" />}
-              {activeTab === "duplicate_check" && <ShieldCheck size={22} color="#0284c7" />}
-              <h1 style={{ fontSize: "1.35rem", fontWeight: 800, margin: 0 }}>
-                {activeTab === "mandates" && "Active Mandates & Cash Bounties"}
-                {activeTab === "bulk_upload" && "Fast-Track Bulk Candidate Import"}
-                {activeTab === "pipeline" && "Submitted Candidate Pipeline"}
-                {activeTab === "payouts" && "Bounties & Commission Wallet"}
-                {activeTab === "duplicate_check" && "Attribution & Duplicate Checker"}
-              </h1>
-              <span
-                style={{
-                  fontSize: "0.725rem",
-                  fontWeight: 700,
-                  padding: "2px 8px",
-                  borderRadius: "var(--radius-full)",
-                  background: "rgba(124, 58, 237, 0.1)",
-                  color: "#7c3aed",
-                  border: "1px solid rgba(124, 58, 237, 0.25)"
-                }}
-              >
-                {activeAgency?.name || "Verified Partner"}
-              </span>
-            </div>
-            <p style={{ marginTop: 4, color: "var(--text-secondary)", fontSize: "0.85rem" }}>
+            <h1 style={{ fontSize: "1.35rem", fontWeight: 800, margin: 0, letterSpacing: "-0.01em" }}>
+              {activeTab === "mandates" && "Active Mandates & Bounties"}
+              {activeTab === "bulk_upload" && "Bulk Candidate Import"}
+              {activeTab === "pipeline" && "Submitted Candidate Pipeline"}
+              {activeTab === "payouts" && "Commission Wallet & Payouts"}
+              {activeTab === "duplicate_check" && "Attribution & Duplicate Checker"}
+              {activeTab === "settings" && "Agency Details & Settings"}
+            </h1>
+            <p style={{ marginTop: 4, color: "var(--text-secondary)", fontSize: "0.85rem", margin: "4px 0 0" }}>
               {activeTab === "mandates" &&
-                `Active requisitions open for headhunting across client companies with transparent cash placement bounties.`}
+                "Active requisitions open for headhunting across client companies with transparent cash placement bounties."}
               {activeTab === "bulk_upload" &&
-                `Multi-row candidate spreadsheet grid with sample batch loader and 1-click batch dispatch into client ATS.`}
+                "Add candidate profiles and dispatch resumes directly into employer ATS."}
               {activeTab === "pipeline" &&
-                `Real-time candidate interview stage tracker across client companies with verified 90-day commercial ownership lock.`}
+                "Track real-time candidate progression and stage updates across employer requisitions."}
               {activeTab === "payouts" &&
-                `Placement commission ledger, TDS 194H calculations, and GST tax invoice generation.`}
+                "Placement commission ledger, TDS 194H calculations, and GST tax invoice generation."}
               {activeTab === "duplicate_check" &&
-                `Check candidate email or phone against client company talent pools before reaching out.`}
+                "Check candidate email or phone against client company talent pools before reaching out."}
+              {activeTab === "settings" &&
+                "Manage agency profile, contact information, commercials, and portal credentials."}
             </p>
           </div>
 
           <div className="header-actions" style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            {activeTab === "mandates" && (
-              <>
-                <button
-                  className="btn btn-secondary btn-sm"
-                  onClick={() => setActiveTab("duplicate_check")}
-                >
-                  <ShieldCheck size={14} color="var(--primary)" />
-                  <span>Check Attribution</span>
-                </button>
-                <button
-                  className="btn btn-primary btn-sm"
-                  onClick={() => setActiveTab("bulk_upload")}
-                  style={{
-                    background: "linear-gradient(135deg, #7c3aed 0%, #4f46e5 100%)",
-                    border: "none",
-                    boxShadow: "0 2px 8px rgba(124, 58, 237, 0.25)"
-                  }}
-                >
-                  <FileSpreadsheet size={14} />
-                  <span>Fast-Track Bulk Import</span>
-                </button>
-              </>
-            )}
-
             {activeTab === "bulk_upload" && (
               <>
                 <button className="btn btn-secondary btn-sm" onClick={handleDownloadCsvTemplate}>
                   <Download size={14} />
-                  <span>Download CSV Template</span>
-                </button>
-                <button
-                  className="btn btn-secondary btn-sm"
-                  onClick={handleLoadSampleBatch}
-                  style={{
-                    background: "rgba(124, 58, 237, 0.08)",
-                    color: "#7c3aed",
-                    borderColor: "rgba(124, 58, 237, 0.3)"
-                  }}
-                >
-                  <Sparkles size={14} />
-                  <span>Load Sample Batch (3 Candidates)</span>
+                  <span>CSV Template</span>
                 </button>
                 <button className="btn btn-primary btn-sm" onClick={handleAddBulkRow}>
                   <Plus size={14} />
-                  <span>Add Row</span>
-                </button>
-              </>
-            )}
-
-            {activeTab === "pipeline" && (
-              <>
-                <button
-                  className="btn btn-secondary btn-sm"
-                  onClick={() => setActiveTab("duplicate_check")}
-                >
-                  <ShieldCheck size={14} />
-                  <span>Check Duplicate</span>
-                </button>
-                <button
-                  className="btn btn-primary btn-sm"
-                  onClick={() => setActiveTab("bulk_upload")}
-                >
-                  <FileSpreadsheet size={14} />
-                  <span>Bulk Upload</span>
+                  <span>Add Candidate</span>
                 </button>
               </>
             )}
@@ -614,16 +661,6 @@ export const AgencyPortal = () => {
               >
                 <ReceiptText size={14} />
                 <span>Generate GST Invoice</span>
-              </button>
-            )}
-
-            {activeTab === "duplicate_check" && (
-              <button
-                className="btn btn-primary btn-sm"
-                onClick={() => setActiveTab("mandates")}
-              >
-                <Briefcase size={14} />
-                <span>Browse Active Mandates</span>
               </button>
             )}
           </div>
@@ -684,7 +721,7 @@ export const AgencyPortal = () => {
                     </div>
                   </div>
                   <div className="kpi-value" style={{ color: "#059669" }}>
-                    {activeAgency?.totalBountiesEarned || "₹2,25,000"}
+                    {activeAgency?.totalBountiesEarned || "₹0"}
                   </div>
                   <div className="kpi-footer">
                     <span style={{ color: "#059669", fontWeight: 700 }}>{hiredByMe.length} Placed Candidates</span>
@@ -1111,20 +1148,6 @@ export const AgencyPortal = () => {
                   <button
                     type="button"
                     className="btn btn-secondary btn-sm"
-                    onClick={handleLoadSampleBatch}
-                    style={{
-                      background: "rgba(124, 58, 237, 0.08)",
-                      color: "#7c3aed",
-                      borderColor: "rgba(124, 58, 237, 0.25)"
-                    }}
-                  >
-                    <Sparkles size={14} />
-                    <span>Load Sample Batch (3)</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    className="btn btn-secondary btn-sm"
                     onClick={handleDownloadCsvTemplate}
                   >
                     <Download size={14} />
@@ -1314,7 +1337,7 @@ export const AgencyPortal = () => {
                                   type="file"
                                   accept=".pdf,.docx,.doc"
                                   style={{ display: "none" }}
-                                  onChange={(e) => {
+                                  onChange={async (e) => {
                                     const file = e.target.files[0];
                                     if (file) {
                                       handleUpdateBulkField(row.id, "resumeFileName", file.name);
@@ -1323,6 +1346,19 @@ export const AgencyPortal = () => {
                                         "resumeFileSize",
                                         `${(file.size / 1024).toFixed(0)} KB`
                                       );
+                                      try {
+                                        const res = await uploadResumeFile(file);
+                                        if (res?.success && res?.url) {
+                                          handleUpdateBulkField(row.id, "resumeUrl", res.url);
+                                          handleUpdateBulkField(
+                                            row.id,
+                                            "resumeSource",
+                                            "cloudinary_storage"
+                                          );
+                                        }
+                                      } catch (cErr) {
+                                        console.warn("Cloudinary upload failed:", cErr);
+                                      }
                                     }
                                   }}
                                 />
@@ -1436,61 +1472,219 @@ export const AgencyPortal = () => {
         {/* TAB 3: SUBMISSIONS & STAGE PIPELINE TRACKER */}
         {activeTab === "pipeline" && (
           <div>
+            {/* Unified Search, Filters & Stage Bar Card */}
             <div
+              className="card"
               style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
+                padding: "16px 20px",
                 marginBottom: 20,
-                flexWrap: "wrap",
-                gap: 12
+                background: "var(--bg-surface)",
+                border: "1px solid var(--border-subtle)",
+                borderRadius: "var(--radius-lg, 12px)",
+                boxShadow: "var(--shadow-sm)"
               }}
             >
-              <div style={{ position: "relative", flex: 1, minWidth: 260 }}>
-                <Search
-                  size={16}
-                  color="var(--text-muted)"
-                  style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)" }}
-                />
-                <input
-                  type="text"
-                  placeholder="Search submitted candidates by name, email, or role..."
-                  className="form-input"
-                  style={{ paddingLeft: 38, height: 38, fontSize: "0.85rem" }}
-                  value={searchSubmissions}
-                  onChange={(e) => setSearchSubmissions(e.target.value)}
-                />
-              </div>
-
-              <div style={{ display: "flex", gap: 6 }}>
-                {[
-                  { id: "all", label: `All (${mySubmissions.length})` },
-                  { id: "applied", label: `Applied (${mySubmissions.filter((c) => c.stage === "applied").length})` },
-                  { id: "interview", label: `Technical Rounds (${mySubmissions.filter((c) => c.stage === "interview").length})` },
-                  { id: "offer", label: `Offer (${mySubmissions.filter((c) => c.stage === "offer").length})` },
-                  { id: "hired", label: `Hired (${hiredByMe.length})` }
-                ].map((st) => (
-                  <button
-                    key={st.id}
-                    onClick={() => setFilterStage(st.id)}
+              {/* Row 1: Search & Filter Controls */}
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 12,
+                  flexWrap: "wrap"
+                }}
+              >
+                {/* Search Box */}
+                <div style={{ position: "relative", flex: "1 1 280px", minWidth: 240 }}>
+                  <Search
+                    size={16}
+                    color="var(--text-muted)"
+                    style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)" }}
+                  />
+                  <input
+                    type="text"
+                    placeholder="Search submitted candidates by name, email, or role..."
+                    className="form-input"
                     style={{
-                      padding: "5px 12px",
-                      borderRadius: "var(--radius-full)",
-                      fontSize: "0.775rem",
-                      fontWeight: filterStage === st.id ? 700 : 500,
-                      background: filterStage === st.id ? "var(--primary)" : "var(--bg-surface)",
-                      color: filterStage === st.id ? "#fff" : "var(--text-secondary)",
-                      border: `1px solid ${filterStage === st.id ? "var(--primary)" : "var(--border-subtle)"}`,
-                      cursor: "pointer"
+                      paddingLeft: 38,
+                      height: 40,
+                      fontSize: "0.85rem",
+                      width: "100%",
+                      borderRadius: 8,
+                      border: "1px solid var(--border-subtle)",
+                      background: "var(--bg-surface-elevated, #f8fafc)"
+                    }}
+                    value={searchSubmissions}
+                    onChange={(e) => setSearchSubmissions(e.target.value)}
+                  />
+                </div>
+
+                {/* Company Filter */}
+                <div style={{ flex: "0 1 180px", minWidth: 160 }}>
+                  <select
+                    className="form-select"
+                    style={{
+                      height: 40,
+                      fontSize: "0.825rem",
+                      padding: "0 12px",
+                      width: "100%",
+                      borderRadius: 8,
+                      border: "1px solid var(--border-subtle)",
+                      background: "var(--bg-surface-elevated, #f8fafc)"
+                    }}
+                    value={filterSubmissionCompany}
+                    onChange={(e) => {
+                      setFilterSubmissionCompany(e.target.value);
+                      setFilterSubmissionJob("all");
+                    }}
+                    title="Filter by Employer Company"
+                  >
+                    <option value="all">All Client Companies</option>
+                    {companies.map((comp) => (
+                      <option key={comp.id} value={comp.id}>
+                        {comp.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Job Requisition Filter */}
+                <div style={{ flex: "0 1 210px", minWidth: 180 }}>
+                  <select
+                    className="form-select"
+                    style={{
+                      height: 40,
+                      fontSize: "0.825rem",
+                      padding: "0 12px",
+                      width: "100%",
+                      borderRadius: 8,
+                      border: "1px solid var(--border-subtle)",
+                      background: "var(--bg-surface-elevated, #f8fafc)"
+                    }}
+                    value={filterSubmissionJob}
+                    onChange={(e) => setFilterSubmissionJob(e.target.value)}
+                    title="Filter by Job Requisition"
+                  >
+                    <option value="all">All Jobs & Requisitions</option>
+                    {syndicatedJobs
+                      .filter((j) => filterSubmissionCompany === "all" || (j.companyId || company.id) === filterSubmissionCompany)
+                      .map((j) => (
+                        <option key={j.id} value={j.id}>
+                          {j.title}
+                        </option>
+                      ))}
+                  </select>
+                </div>
+
+                {/* Time Range Filter */}
+                <div style={{ flex: "0 1 140px", minWidth: 130 }}>
+                  <select
+                    className="form-select"
+                    style={{
+                      height: 40,
+                      fontSize: "0.825rem",
+                      padding: "0 12px",
+                      width: "100%",
+                      borderRadius: 8,
+                      border: "1px solid var(--border-subtle)",
+                      background: "var(--bg-surface-elevated, #f8fafc)"
+                    }}
+                    value={filterSubmissionTime}
+                    onChange={(e) => setFilterSubmissionTime(e.target.value)}
+                    title="Filter by Submission Time"
+                  >
+                    <option value="all">All Time</option>
+                    <option value="today">Today</option>
+                    <option value="7d">Last 7 Days</option>
+                    <option value="30d">Last 30 Days</option>
+                    <option value="90d">Last 90 Days</option>
+                    <option value="year">Past Year</option>
+                  </select>
+                </div>
+
+                {/* Reset Filters */}
+                {(searchSubmissions ||
+                  filterStage !== "all" ||
+                  filterSubmissionCompany !== "all" ||
+                  filterSubmissionJob !== "all" ||
+                  filterSubmissionTime !== "all") && (
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    onClick={() => {
+                      setSearchSubmissions("");
+                      setFilterStage("all");
+                      setFilterSubmissionCompany("all");
+                      setFilterSubmissionJob("all");
+                      setFilterSubmissionTime("all");
+                    }}
+                    style={{
+                      fontSize: "0.8rem",
+                      color: "#ef4444",
+                      height: 40,
+                      fontWeight: 700,
+                      padding: "0 12px",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 6,
+                      borderRadius: 8
                     }}
                   >
-                    {st.label}
+                    <X size={14} /> Clear
                   </button>
-                ))}
+                )}
+              </div>
+
+              {/* Subtle Divider */}
+              <div style={{ height: 1, background: "var(--border-subtle)", margin: "14px 0" }} />
+
+              {/* Row 2: Stage Pills Bar & Results Summary */}
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  flexWrap: "wrap",
+                  gap: 12
+                }}
+              >
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  {[
+                    { id: "all", label: `All (${mySubmissions.length})` },
+                    { id: "applied", label: `Applied (${mySubmissions.filter((c) => c.stage === "applied").length})` },
+                    { id: "interview", label: `Technical Rounds (${mySubmissions.filter((c) => c.stage === "interview").length})` },
+                    { id: "offer", label: `Offer (${mySubmissions.filter((c) => c.stage === "offer").length})` },
+                    { id: "hired", label: `Hired (${hiredByMe.length})` }
+                  ].map((st) => (
+                    <button
+                      key={st.id}
+                      type="button"
+                      onClick={() => setFilterStage(st.id)}
+                      style={{
+                        padding: "6px 14px",
+                        borderRadius: "var(--radius-full)",
+                        fontSize: "0.785rem",
+                        fontWeight: filterStage === st.id ? 700 : 500,
+                        background: filterStage === st.id ? "var(--primary)" : "var(--bg-surface-elevated)",
+                        color: filterStage === st.id ? "#fff" : "var(--text-secondary)",
+                        border: `1px solid ${filterStage === st.id ? "var(--primary)" : "var(--border-subtle)"}`,
+                        cursor: "pointer",
+                        transition: "all 0.15s ease",
+                        boxShadow: filterStage === st.id ? "0 2px 8px var(--primary-glow)" : "none"
+                      }}
+                    >
+                      {st.label}
+                    </button>
+                  ))}
+                </div>
+
+                <div style={{ fontSize: "0.825rem", color: "var(--text-muted)", fontWeight: 500 }}>
+                  Showing <strong style={{ color: "var(--text-primary)" }}>{filteredSubmissions.length}</strong> of {mySubmissions.length} candidates
+                </div>
               </div>
             </div>
 
-            <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+            {/* Candidate Submissions Table */}
+            <div className="card" style={{ padding: 0, overflow: "hidden", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-lg, 12px)" }}>
               <table className="custom-table">
                 <thead>
                   <tr>
@@ -1508,8 +1702,67 @@ export const AgencyPortal = () => {
                 <tbody>
                   {filteredSubmissions.length === 0 ? (
                     <tr>
-                      <td colSpan={9} style={{ textAlign: "center", padding: "40px", color: "var(--text-muted)" }}>
-                        No candidate submissions matching current filters.
+                      <td colSpan={9} style={{ textAlign: "center", padding: "60px 20px" }}>
+                        <div
+                          style={{
+                            maxWidth: 400,
+                            margin: "0 auto",
+                            display: "flex",
+                            flexDirection: "column",
+                            alignItems: "center",
+                            gap: 12
+                          }}
+                        >
+                          <div
+                            style={{
+                              width: 48,
+                              height: 48,
+                              borderRadius: "50%",
+                              background: "rgba(79, 70, 229, 0.08)",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              color: "var(--primary)"
+                            }}
+                          >
+                            <Users2 size={24} />
+                          </div>
+                          <div>
+                            <div style={{ fontWeight: 700, fontSize: "0.95rem", color: "var(--text-primary)" }}>
+                              No candidate submissions found
+                            </div>
+                            <div style={{ fontSize: "0.825rem", color: "var(--text-muted)", marginTop: 4 }}>
+                              {searchSubmissions || filterStage !== "all" || filterSubmissionCompany !== "all" || filterSubmissionJob !== "all" || filterSubmissionTime !== "all"
+                                ? "No candidates match the selected filters. Try adjusting or clearing filters."
+                                : "No candidates have been submitted to client employer mandates yet."}
+                            </div>
+                          </div>
+                          {searchSubmissions || filterStage !== "all" || filterSubmissionCompany !== "all" || filterSubmissionJob !== "all" || filterSubmissionTime !== "all" ? (
+                            <button
+                              type="button"
+                              className="btn btn-secondary btn-sm"
+                              onClick={() => {
+                                setSearchSubmissions("");
+                                setFilterStage("all");
+                                setFilterSubmissionCompany("all");
+                                setFilterSubmissionJob("all");
+                                setFilterSubmissionTime("all");
+                              }}
+                              style={{ marginTop: 6 }}
+                            >
+                              Reset Filters
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              className="btn btn-primary btn-sm"
+                              onClick={() => setActiveTab("mandates")}
+                              style={{ marginTop: 6 }}
+                            >
+                              Browse Mandates &rarr;
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ) : (
@@ -1600,7 +1853,7 @@ export const AgencyPortal = () => {
                           </span>
                         </td>
                         <td style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>
-                          {c.submittedAt || "2026-09-12"}
+                          {c.submittedAt || c.appliedDate || c.date || "—"}
                         </td>
                       </tr>
                     ))
@@ -1624,7 +1877,7 @@ export const AgencyPortal = () => {
                   </div>
                 </div>
                 <div className="kpi-value" style={{ color: "#059669" }}>
-                  {activeAgency?.totalBountiesEarned || "₹2,25,000"}
+                  {activeAgency?.totalBountiesEarned || "₹0"}
                 </div>
                 <div className="kpi-footer">
                   <span style={{ color: "#059669", fontWeight: 700 }}>Approved Bounties</span>
@@ -1638,7 +1891,7 @@ export const AgencyPortal = () => {
                     <Users2 size={18} />
                   </div>
                 </div>
-                <div className="kpi-value">{hiredByMe.length || 2} Placements</div>
+                <div className="kpi-value">{hiredByMe.length} Placements</div>
                 <div className="kpi-footer">
                   <span>Joined & Verified</span>
                 </div>
@@ -1651,7 +1904,9 @@ export const AgencyPortal = () => {
                     <IndianRupee size={18} />
                   </div>
                 </div>
-                <div className="kpi-value" style={{ color: "#dc2626" }}>- ₹22,500</div>
+                <div className="kpi-value" style={{ color: "#dc2626" }}>
+                  {hiredByMe.length > 0 ? "- 10%" : "₹0"}
+                </div>
                 <div className="kpi-footer">
                   <span>10% Form 16A Credit</span>
                 </div>
@@ -1664,9 +1919,11 @@ export const AgencyPortal = () => {
                     <ReceiptText size={18} />
                   </div>
                 </div>
-                <div className="kpi-value" style={{ color: "#0284c7" }}>₹2,02,500</div>
+                <div className="kpi-value" style={{ color: "#0284c7" }}>
+                  {activeAgency?.totalBountiesEarned || "₹0"}
+                </div>
                 <div className="kpi-footer">
-                  <span>HDFC Bank &bull;&bull;&bull;&bull; 8821</span>
+                  <span>Direct Bank Transfer</span>
                 </div>
               </div>
             </div>
@@ -1687,19 +1944,23 @@ export const AgencyPortal = () => {
                   <div style={{ background: "var(--bg-surface-elevated)", padding: "14px 16px", borderRadius: "var(--radius-md)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                     <div>
                       <div style={{ fontSize: "0.775rem", color: "var(--text-muted)" }}>Agreed Placement Commission Rate</div>
-                      <div style={{ fontWeight: 800, fontSize: "1rem" }}>8.33% of Annual Fixed CTC (1 Month Gross)</div>
+                      <div style={{ fontWeight: 800, fontSize: "1rem" }}>{activeAgency?.commissionRate || "8.50% [Standard Retainer]"}</div>
                     </div>
                     <span className="badge badge-active">Active Contract</span>
                   </div>
 
                   <div style={{ display: "flex", justifyContent: "space-between", padding: "12px", borderBottom: "1px solid var(--border-subtle)" }}>
                     <span style={{ color: "var(--text-secondary)" }}>Total Bounties Claimed to Date:</span>
-                    <span style={{ fontWeight: 800, color: "#059669" }}>{activeAgency?.totalBountiesEarned || "₹2,25,000"}</span>
+                    <span style={{ fontWeight: 800, color: "#059669" }}>{activeAgency?.totalBountiesEarned || "₹0"}</span>
                   </div>
 
                   <div style={{ display: "flex", justifyContent: "space-between", padding: "12px", borderBottom: "1px solid var(--border-subtle)" }}>
                     <span style={{ color: "var(--text-secondary)" }}>Pending Payout (Offer In Progress):</span>
-                    <span style={{ fontWeight: 800, color: "var(--primary)" }}>₹1,50,000</span>
+                    <span style={{ fontWeight: 800, color: "var(--primary)" }}>
+                      {mySubmissions.filter((c) => c.stage === "offer").length > 0
+                        ? `${mySubmissions.filter((c) => c.stage === "offer").length} Offer(s) Pending`
+                        : "₹0"}
+                    </span>
                   </div>
 
                   <div style={{ display: "flex", justifyContent: "space-between", padding: "12px", borderBottom: "1px solid var(--border-subtle)" }}>
@@ -1709,7 +1970,7 @@ export const AgencyPortal = () => {
 
                   <div style={{ display: "flex", justifyContent: "space-between", padding: "12px" }}>
                     <span style={{ color: "var(--text-secondary)" }}>Settlement Bank Account:</span>
-                    <span style={{ fontWeight: 600 }}>HDFC Bank &bull;&bull;&bull;&bull; 8821</span>
+                    <span style={{ fontWeight: 600 }}>{activeAgency?.bankDetails || "Bank Account on File"}</span>
                   </div>
                 </div>
               </div>
@@ -1777,53 +2038,6 @@ export const AgencyPortal = () => {
                 </button>
               </form>
 
-              {/* Instant Test Lookup Chips */}
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 20, flexWrap: "wrap" }}>
-                <span style={{ fontSize: "0.75rem", color: "var(--text-muted)", fontWeight: 600 }}>Quick Test Lookup:</span>
-                <button
-                  type="button"
-                  className="btn btn-ghost btn-sm"
-                  style={{
-                    padding: "3px 9px",
-                    fontSize: "0.725rem",
-                    background: "rgba(16, 185, 129, 0.1)",
-                    color: "#065f46",
-                    borderRadius: "var(--radius-sm)",
-                    fontWeight: 700
-                  }}
-                  onClick={() => {
-                    setDupQuery("rohit.kapoor@cloud.com");
-                    setDupResult({ found: false });
-                  }}
-                >
-                  Test Free Candidate
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-ghost btn-sm"
-                  style={{
-                    padding: "3px 9px",
-                    fontSize: "0.725rem",
-                    background: "rgba(239, 68, 68, 0.1)",
-                    color: "#991b1b",
-                    borderRadius: "var(--radius-sm)",
-                    fontWeight: 700
-                  }}
-                  onClick={() => {
-                    setDupQuery("ananya.sen@gmail.com");
-                    setDupResult({
-                      found: true,
-                      candidateName: "Ananya Sen",
-                      role: "Lead Distributed Systems Engineer",
-                      source: "Direct Career Site Application",
-                      date: "12 days ago (Active 90-Day Lock)"
-                    });
-                  }}
-                >
-                  Test Existing Candidate
-                </button>
-              </div>
-
               {dupResult && (
                 <div>
                   {dupResult.found ? (
@@ -1861,6 +2075,361 @@ export const AgencyPortal = () => {
                 </div>
               )}
             </div>
+          </div>
+        )}
+
+        {/* TAB 6: AGENCY DETAILS & SETTINGS */}
+        {activeTab === "settings" && (
+          <div style={{ maxWidth: 960, margin: "0 auto" }}>
+            {settingsSuccessMsg && (
+              <div
+                style={{
+                  background: "#ecfdf5",
+                  border: "1px solid #10b981",
+                  borderRadius: "var(--radius-md)",
+                  padding: "14px 18px",
+                  color: "#065f46",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 10,
+                  marginBottom: 20,
+                  boxShadow: "0 2px 8px rgba(16, 185, 129, 0.12)"
+                }}
+              >
+                <CheckCircle size={20} color="#10b981" />
+                <div style={{ fontWeight: 700, fontSize: "0.9rem" }}>{settingsSuccessMsg}</div>
+              </div>
+            )}
+
+            <form onSubmit={handleSaveAgencySettings} style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+              {/* Card 1: Logo & Branding */}
+              <div
+                className="card"
+                style={{
+                  background: "var(--bg-surface)",
+                  borderRadius: "var(--radius-lg)",
+                  border: "1px solid var(--border-subtle)",
+                  padding: 24
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18 }}>
+                  <div>
+                    <h3 style={{ fontSize: "1.05rem", fontWeight: 800, margin: "0 0 4px" }}>
+                      Agency Visual Branding & Logo
+                    </h3>
+                    <p style={{ fontSize: "0.8rem", color: "var(--text-secondary)", margin: 0 }}>
+                      This logo is displayed at the top of your agency workspace and across client ATS candidate submissions.
+                    </p>
+                  </div>
+                </div>
+
+                <div style={{ display: "flex", alignItems: "center", gap: 24, flexWrap: "wrap" }}>
+                  <div style={{ position: "relative" }}>
+                    <div
+                      style={{
+                        width: 84,
+                        height: 84,
+                        borderRadius: 16,
+                        background: "#ffffff",
+                        padding: 6,
+                        border: "1.5px solid var(--border-medium)",
+                        boxShadow: "0 4px 16px rgba(0,0,0,0.08)",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        overflow: "hidden"
+                      }}
+                    >
+                      <img
+                        src={agencyForm.logoUrl || "/logo-exhier.png"}
+                        alt="Agency Logo"
+                        onError={(e) => {
+                          e.currentTarget.onerror = null;
+                          e.currentTarget.src = "/logo-exhier.png";
+                        }}
+                        style={{
+                          width: "100%",
+                          height: "100%",
+                          objectFit: "contain"
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  <div style={{ flex: 1, minWidth: 260, display: "flex", flexDirection: "column", gap: 10 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                      <label
+                        className="btn btn-secondary btn-sm"
+                        style={{
+                          cursor: isUploadingLogo ? "wait" : "pointer",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 6
+                        }}
+                      >
+                        <Camera size={15} />
+                        <span>{isUploadingLogo ? "Uploading to Cloud..." : "Upload Agency Logo"}</span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          style={{ display: "none" }}
+                          disabled={isUploadingLogo}
+                          onChange={handleLogoUpload}
+                        />
+                      </label>
+
+                      {agencyForm.logoUrl && (
+                        <button
+                          type="button"
+                          className="btn btn-ghost btn-sm"
+                          style={{ color: "#dc2626" }}
+                          onClick={() => setAgencyForm((prev) => ({ ...prev, logoUrl: "" }))}
+                        >
+                          <Trash2 size={14} />
+                          <span>Remove</span>
+                        </button>
+                      )}
+                    </div>
+
+                    <div>
+                      <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--text-muted)", display: "block", marginBottom: 4 }}>
+                        Or Direct Logo Image URL
+                      </label>
+                      <input
+                        type="url"
+                        className="form-input"
+                        placeholder="https://example.com/agency-logo.png"
+                        value={agencyForm.logoUrl || ""}
+                        onChange={(e) => setAgencyForm({ ...agencyForm, logoUrl: e.target.value })}
+                        style={{ fontSize: "0.825rem", padding: "7px 10px" }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Card 2: Agency Identity & Contact */}
+              <div
+                className="card"
+                style={{
+                  background: "var(--bg-surface)",
+                  borderRadius: "var(--radius-lg)",
+                  border: "1px solid var(--border-subtle)",
+                  padding: 24
+                }}
+              >
+                <h3 style={{ fontSize: "1.05rem", fontWeight: 800, margin: "0 0 16px" }}>
+                  Agency Identity & Authorized Contact Details
+                </h3>
+
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 16 }}>
+                  <div>
+                    <label className="form-label" style={{ fontWeight: 700 }}>
+                      Agency Name *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      className="form-input"
+                      placeholder="e.g. Apex Talent Partners"
+                      value={agencyForm.name}
+                      onChange={(e) => setAgencyForm({ ...agencyForm, name: e.target.value })}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="form-label" style={{ fontWeight: 700 }}>
+                      Operating Locations / Cities *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      className="form-input"
+                      placeholder="e.g. Mumbai & Bengaluru"
+                      value={agencyForm.city}
+                      onChange={(e) => setAgencyForm({ ...agencyForm, city: e.target.value })}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="form-label" style={{ fontWeight: 700 }}>
+                      Authorized Contact Person *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      className="form-input"
+                      placeholder="e.g. Ritu Sengupta"
+                      value={agencyForm.primaryContact}
+                      onChange={(e) => setAgencyForm({ ...agencyForm, primaryContact: e.target.value })}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="form-label" style={{ fontWeight: 700 }}>
+                      Corporate Email *
+                    </label>
+                    <input
+                      type="email"
+                      required
+                      className="form-input"
+                      placeholder="e.g. partner@apextalent.in"
+                      value={agencyForm.email}
+                      onChange={(e) => setAgencyForm({ ...agencyForm, email: e.target.value })}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="form-label" style={{ fontWeight: 700 }}>
+                      Phone / WhatsApp Number
+                    </label>
+                    <input
+                      type="tel"
+                      className="form-input"
+                      placeholder="e.g. +91 98450 77123"
+                      value={agencyForm.phone}
+                      onChange={(e) => setAgencyForm({ ...agencyForm, phone: e.target.value })}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="form-label" style={{ fontWeight: 700 }}>
+                      Specialization & Practice Areas
+                    </label>
+                    <input
+                      type="text"
+                      className="form-input"
+                      placeholder="e.g. Fintech Infrastructure, Cloud Platforms, AI/ML"
+                      value={agencyForm.specialization}
+                      onChange={(e) => setAgencyForm({ ...agencyForm, specialization: e.target.value })}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Card 3: Commercials & Credentials */}
+              <div
+                className="card"
+                style={{
+                  background: "var(--bg-surface)",
+                  borderRadius: "var(--radius-lg)",
+                  border: "1px solid var(--border-subtle)",
+                  padding: 24
+                }}
+              >
+                <h3 style={{ fontSize: "1.05rem", fontWeight: 800, margin: "0 0 16px" }}>
+                  Commercial Terms & Portal Credentials
+                </h3>
+
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 16 }}>
+                  <div>
+                    <label className="form-label" style={{ fontWeight: 700 }}>
+                      Commission Rate / Retainer Model
+                    </label>
+                    <input
+                      type="text"
+                      className="form-input"
+                      placeholder="e.g. 8.50% [Standard Retainer]"
+                      value={agencyForm.commissionRate}
+                      onChange={(e) => setAgencyForm({ ...agencyForm, commissionRate: e.target.value })}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="form-label" style={{ fontWeight: 700 }}>
+                      GSTIN / Tax Identification Number
+                    </label>
+                    <input
+                      type="text"
+                      className="form-input"
+                      placeholder="e.g. 27AAAAA0000A1Z5"
+                      value={agencyForm.gstin}
+                      onChange={(e) => setAgencyForm({ ...agencyForm, gstin: e.target.value })}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="form-label" style={{ fontWeight: 700 }}>
+                      Agency Portal ID / Code
+                    </label>
+                    <input
+                      type="text"
+                      className="form-input"
+                      style={{ fontFamily: "var(--font-mono)", fontWeight: 700 }}
+                      placeholder="e.g. APEX-TALENT-BLR"
+                      value={agencyForm.portalCode}
+                      onChange={(e) => setAgencyForm({ ...agencyForm, portalCode: e.target.value.toUpperCase() })}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="form-label" style={{ fontWeight: 700 }}>
+                      Portal Access Password
+                    </label>
+                    <input
+                      type="text"
+                      className="form-input"
+                      placeholder="Password"
+                      value={agencyForm.portalPassword}
+                      onChange={(e) => setAgencyForm({ ...agencyForm, portalPassword: e.target.value })}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Action Buttons Bar */}
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  flexWrap: "wrap",
+                  gap: 12,
+                  padding: "16px 0"
+                }}
+              >
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  style={{
+                    background: "linear-gradient(135deg, #7c3aed 0%, #4f46e5 100%)",
+                    border: "none",
+                    boxShadow: "0 4px 12px rgba(124, 58, 237, 0.3)",
+                    padding: "10px 24px",
+                    fontWeight: 700,
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 8,
+                    cursor: isSavingSettings ? "wait" : "pointer",
+                    opacity: isSavingSettings ? 0.75 : 1
+                  }}
+                  disabled={isSavingSettings}
+                >
+                  <Save size={16} />
+                  <span>{isSavingSettings ? "Saving Changes..." : "Save Agency Details"}</span>
+                </button>
+
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  onClick={logout}
+                  style={{
+                    color: "#ef4444",
+                    background: "rgba(239, 68, 68, 0.08)",
+                    border: "1px solid rgba(239, 68, 68, 0.25)",
+                    fontWeight: 700,
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 8,
+                    padding: "10px 20px"
+                  }}
+                  title="Exit and Sign Out to Workspace Login"
+                >
+                  <LogOut size={16} />
+                  <span>Exit Agency Portal</span>
+                </button>
+              </div>
+            </form>
           </div>
         )}
       </div>
@@ -2071,26 +2640,102 @@ export const AgencyPortal = () => {
                     />
                   </div>
 
-                  {/* Resume Upload Simulation */}
+                  {/* Real Cloudinary Resume Upload */}
                   <div className="form-group">
                     <label className="form-label">Attach Verified Candidate Resume (PDF / DOCX)</label>
-                    <div
+                    <label
                       style={{
-                        border: "2px dashed var(--border-medium)",
+                        border: candidateForm.resumeUrl ? "1px solid #10b981" : "2px dashed var(--border-medium)",
                         borderRadius: "var(--radius-md)",
                         padding: "16px",
                         textAlign: "center",
-                        background: "var(--bg-surface-elevated)"
+                        background: candidateForm.resumeUrl ? "rgba(16, 185, 129, 0.04)" : "var(--bg-surface-elevated)",
+                        display: "block",
+                        cursor: isUploadingSingleResume ? "not-allowed" : "pointer",
+                        transition: "all 0.15s ease"
                       }}
                     >
-                      <UploadCloud size={20} color="var(--primary)" style={{ margin: "0 auto 4px" }} />
-                      <div style={{ fontSize: "0.825rem", fontWeight: 700 }}>
-                        {candidateForm.name ? `${candidateForm.name.replace(/\s/g, "_")}_Resume.pdf` : "Candidate_Resume.pdf"} (Auto-Linked)
-                      </div>
-                      <div style={{ fontSize: "0.725rem", color: "var(--text-muted)" }}>
-                        Standard agency formatted CV with contact details masked for privacy
-                      </div>
-                    </div>
+                      {isUploadingSingleResume ? (
+                        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
+                          <span
+                            style={{
+                              width: 20,
+                              height: 20,
+                              border: "2px solid rgba(79, 70, 229, 0.3)",
+                              borderTopColor: "var(--primary)",
+                              borderRadius: "50%",
+                              animation: "spin 0.8s linear infinite",
+                              display: "inline-block"
+                            }}
+                          />
+                          <span style={{ fontSize: "0.825rem", fontWeight: 600, color: "var(--primary)" }}>
+                            Uploading directly to Cloudinary (preset: resumes, cloud: ljelkpy4)...
+                          </span>
+                        </div>
+                      ) : candidateForm.resumeUrl ? (
+                        <div>
+                          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, color: "#059669" }}>
+                            <CheckCircle size={16} />
+                            <strong style={{ fontSize: "0.85rem" }}>
+                              {candidateForm.resumeFileName || "Candidate_Resume.pdf"}
+                            </strong>
+                          </div>
+                          <div style={{ fontSize: "0.725rem", color: "var(--text-secondary)", marginTop: 4 }}>
+                            Uploaded to Cloudinary &bull;{" "}
+                            <a
+                              href={candidateForm.resumeUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              style={{ color: "#2563eb", fontWeight: 600 }}
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              Preview Secure Cloud Asset &rarr;
+                            </a>
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          <UploadCloud size={22} color="var(--primary)" style={{ margin: "0 auto 4px", display: "block" }} />
+                          <div style={{ fontSize: "0.825rem", fontWeight: 700, color: "var(--text-primary)" }}>
+                            {candidateForm.name ? `${candidateForm.name.replace(/\s/g, "_")}_Resume.pdf` : "Choose Candidate Resume (PDF / DOCX)"}
+                          </div>
+                          <div style={{ fontSize: "0.725rem", color: "var(--text-muted)", marginTop: 2 }}>
+                            Click to browse and upload directly to Cloudinary storage
+                          </div>
+                        </>
+                      )}
+                      <input
+                        type="file"
+                        accept=".pdf,.doc,.docx"
+                        disabled={isUploadingSingleResume}
+                        style={{ display: "none" }}
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            setCandidateForm((prev) => ({
+                              ...prev,
+                              resumeFileName: file.name,
+                              resumeFileSize: `${(file.size / 1024).toFixed(0)} KB`
+                            }));
+                            setIsUploadingSingleResume(true);
+                            try {
+                              const res = await uploadResumeFile(file);
+                              if (res?.success && res?.url) {
+                                setCandidateForm((prev) => ({
+                                  ...prev,
+                                  resumeUrl: res.url,
+                                  resumeFileName: file.name
+                                }));
+                              }
+                            } catch (err) {
+                              console.warn("Cloudinary upload failed:", err);
+                            } finally {
+                              setIsUploadingSingleResume(false);
+                            }
+                          }
+                        }}
+                      />
+                    </label>
                   </div>
                 </div>
 

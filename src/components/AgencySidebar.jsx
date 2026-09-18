@@ -12,7 +12,9 @@ import {
   PlusCircle,
   Sparkles,
   ArrowRight,
-  ReceiptText
+  ReceiptText,
+  LogOut,
+  Settings
 } from "lucide-react";
 
 export const AgencySidebar = ({ activeTab, setActiveTab, onOpenSubmitModal }) => {
@@ -25,13 +27,17 @@ export const AgencySidebar = ({ activeTab, setActiveTab, onOpenSubmitModal }) =>
     selectedAgencyId,
     setSelectedAgencyId,
     activeAgency,
-    setActiveRole
+    setActiveRole,
+    logout
   } = useAts();
 
-  // Active syndicated jobs across ALL client companies
-  const syndicatedJobs = jobs.filter(
-    (j) => j.syndicateToAgencies && j.status === "active"
-  );
+  // Active syndicated jobs across client companies, excluding any blocked companies
+  const syndicatedJobs = jobs.filter((j) => {
+    if (!j.syndicateToAgencies || j.status !== "active") return false;
+    const jobCompId = j.companyId || company.id;
+    const isBlocked = (activeAgency?.blockedCompanyIds || []).includes(jobCompId);
+    return !isBlocked;
+  });
 
   // Agency submitted candidates
   const mySubmissions = candidates.filter(
@@ -62,13 +68,34 @@ export const AgencySidebar = ({ activeTab, setActiveTab, onOpenSubmitModal }) =>
       <div className="sidebar-brand-box">
         <div className="company-badge-row">
           <div
-            className="company-logo-avatar"
             style={{
-              background: "linear-gradient(135deg, #7c3aed 0%, #db2777 100%)",
-              boxShadow: "0 4px 12px rgba(124, 58, 237, 0.25)"
+              width: 44,
+              height: 44,
+              borderRadius: 10,
+              background: "#ffffff",
+              border: "1px solid var(--border-subtle)",
+              boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              padding: 4,
+              overflow: "hidden",
+              flexShrink: 0
             }}
           >
-            {agencyInitials}
+            <img
+              src={activeAgency?.logoUrl || activeAgency?.logo || "/logo-exhier.png"}
+              alt={activeAgency?.name || "Agency Logo"}
+              onError={(e) => {
+                e.currentTarget.onerror = null;
+                e.currentTarget.src = "/logo-exhier.png";
+              }}
+              style={{
+                width: "100%",
+                height: "100%",
+                objectFit: "contain"
+              }}
+            />
           </div>
 
           <div className="company-info">
@@ -157,130 +184,91 @@ export const AgencySidebar = ({ activeTab, setActiveTab, onOpenSubmitModal }) =>
           <ShieldCheck size={17} />
           <span>Attribution & Dup Check</span>
         </button>
+
+        <div className="sidebar-nav-heading" style={{ marginTop: 8 }}>
+          Agency Management
+        </div>
+
+        <button
+          className={`sidebar-nav-item ${activeTab === "settings" ? "active" : ""}`}
+          onClick={() => setActiveTab("settings")}
+        >
+          <Settings size={17} />
+          <span>Agency Details & Settings</span>
+        </button>
       </nav>
 
-      {/* Agency Partner Switcher & Quick ATS Links */}
-      <div style={{ padding: "0 12px 12px" }}>
-        <div
+      {/* Recruiter / Account Manager Footer & Sign Out */}
+      <div className="sidebar-footer" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0, flex: 1 }}>
+          <div
+            className="user-avatar-sm"
+            style={{ background: "linear-gradient(135deg, #7c3aed 0%, #06b6d4 100%)" }}
+          >
+            {contactInitials}
+          </div>
+          <div style={{ flex: 1, minWidth: 0, overflow: "hidden" }}>
+            <div
+              style={{
+                fontSize: "0.825rem",
+                fontWeight: 700,
+                color: "var(--text-primary)",
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis"
+              }}
+            >
+              {activeAgency?.primaryContact || "Placement Manager"}
+            </div>
+            <div
+              style={{
+                fontSize: "0.7rem",
+                color: "var(--text-muted)",
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                display: "flex",
+                alignItems: "center",
+                gap: 4
+              }}
+            >
+              <span
+                style={{
+                  width: 5,
+                  height: 5,
+                  borderRadius: "50%",
+                  background: "#10b981"
+                }}
+              />
+              <span>{activeAgency?.portalCode || "PARTNER"} &bull; Tier-1 Vendor</span>
+            </div>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={logout}
+          className="btn btn-ghost btn-sm"
           style={{
-            background: "var(--bg-surface-elevated)",
-            border: "1px solid var(--border-subtle)",
-            borderRadius: "var(--radius-md)",
-            padding: "12px",
-            display: "flex",
-            flexDirection: "column",
-            gap: "8px"
+            padding: "5px 10px",
+            height: 30,
+            color: "#ef4444",
+            background: "rgba(239, 68, 68, 0.08)",
+            border: "1px solid rgba(239, 68, 68, 0.2)",
+            borderRadius: 6,
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 5,
+            fontSize: "0.75rem",
+            fontWeight: 700,
+            flexShrink: 0,
+            cursor: "pointer"
           }}
+          title="Exit and Sign Out of Agency Portal"
         >
-          <div
-            style={{
-              fontSize: "0.68rem",
-              fontWeight: 700,
-              color: "#7c3aed",
-              textTransform: "uppercase",
-              letterSpacing: "0.04em",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between"
-            }}
-          >
-            <span>Partner Firm Seat</span>
-            <span
-              style={{
-                width: 6,
-                height: 6,
-                borderRadius: "50%",
-                background: "#10b981",
-                boxShadow: "0 0 6px #10b981"
-              }}
-            />
-          </div>
-
-          <select
-            className="form-select"
-            style={{
-              padding: "6px 8px",
-              fontSize: "0.75rem",
-              background: "var(--bg-surface)",
-              borderRadius: "var(--radius-sm)",
-              border: "1px solid var(--border-subtle)",
-              cursor: "pointer",
-              fontWeight: 600
-            }}
-            value={selectedAgencyId}
-            onChange={(e) => setSelectedAgencyId(e.target.value)}
-          >
-            {agencies.map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.name} ({a.city})
-              </option>
-            ))}
-          </select>
-
-          <button
-            className="btn btn-ghost btn-sm"
-            style={{
-              justifyContent: "space-between",
-              padding: "5px 8px",
-              fontSize: "0.75rem",
-              borderRadius: "var(--radius-sm)",
-              marginTop: 4
-            }}
-            onClick={() => setActiveRole("company_admin")}
-          >
-            <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <Building size={13} color="var(--primary)" />
-              <span>Switch to Employer ATS</span>
-            </span>
-            <ArrowRight size={11} color="var(--text-muted)" />
-          </button>
-        </div>
-      </div>
-
-      {/* Recruiter / Account Manager Footer */}
-      <div className="sidebar-footer">
-        <div
-          className="user-avatar-sm"
-          style={{ background: "linear-gradient(135deg, #7c3aed 0%, #06b6d4 100%)" }}
-        >
-          {contactInitials}
-        </div>
-        <div style={{ flex: 1, minWidth: 0, overflow: "hidden" }}>
-          <div
-            style={{
-              fontSize: "0.825rem",
-              fontWeight: 700,
-              color: "var(--text-primary)",
-              whiteSpace: "nowrap",
-              overflow: "hidden",
-              textOverflow: "ellipsis"
-            }}
-          >
-            {activeAgency?.primaryContact || "Placement Manager"}
-          </div>
-          <div
-            style={{
-              fontSize: "0.7rem",
-              color: "var(--text-muted)",
-              whiteSpace: "nowrap",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              display: "flex",
-              alignItems: "center",
-              gap: 4
-            }}
-          >
-            <span
-              style={{
-                width: 5,
-                height: 5,
-                borderRadius: "50%",
-                background: "#10b981"
-              }}
-            />
-            <span>{activeAgency?.portalCode || "PARTNER"} &bull; Tier-1 Vendor</span>
-          </div>
-        </div>
+          <LogOut size={13} />
+          <span>Exit</span>
+        </button>
       </div>
 
       <div

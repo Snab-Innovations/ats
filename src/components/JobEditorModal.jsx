@@ -86,7 +86,7 @@ export const JobEditorModal = () => {
     if (editingJob) {
       updateJob(editingJob.id, formData);
     } else {
-      addJob({ ...formData, companyId: company?.id || "comp-bharat-101" });
+      addJob({ ...formData, companyId: company?.id || "comp-mu5rn6mu" });
     }
     setIsJobModalOpen(false);
   };
@@ -374,7 +374,7 @@ export const JobEditorModal = () => {
                   <Share2 size={18} color="#7c3aed" />
                   <div>
                     <div style={{ fontWeight: 700, fontSize: "0.9rem" }}>
-                      Recruitment Consultancy Syndication (Naukri Elite, ABC, SutraHR)
+                      Recruitment Consultancy Syndication (Authorized Partner Agencies)
                     </div>
                     <div style={{ fontSize: "0.75rem", color: "var(--text-secondary)" }}>
                       Dispatches requisition to certified Indian headhunters with placement bounty

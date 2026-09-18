@@ -1,5 +1,7 @@
 import React from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useAts } from "../context/AtsContext";
+import { getCompanySlug } from "../utils/companySlug";
 import {
   Building2,
   Users2,
@@ -13,6 +15,16 @@ import {
 } from "lucide-react";
 
 export const DemoSwitcherBar = () => {
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  const isSuperAdmin = location.pathname.startsWith("/super-admin") || location.pathname.startsWith("/superadmin") || location.pathname.startsWith("/admin");
+  const isEmployerAts = location.pathname.startsWith("/employer-dashboard") || location.pathname.startsWith("/employer-ats") || location.pathname.startsWith("/ats") || location.pathname === "/";
+  const isAgencyPortal = location.pathname.startsWith("/agency");
+  const isCareerSite = location.pathname.startsWith("/career") || location.pathname.endsWith("-careers");
+  const isExpertHire = location.pathname.startsWith("/experthire") || location.pathname.startsWith("/jobs");
+  const isIframe = location.pathname.startsWith("/iframe") || location.pathname.startsWith("/embed");
+
   const {
     activeRole,
     setActiveRole,
@@ -93,11 +105,14 @@ export const DemoSwitcherBar = () => {
       {/* Micro Role Switcher Tabs */}
       <div className="demo-role-tabs">
         <button
-          className={`demo-role-btn ${activeRole === "super_admin" ? "active" : ""}`}
-          onClick={() => setActiveRole("super_admin")}
-          title="Super Admin: Multi-Tenant Platform Engine"
+          className={`demo-role-btn ${isSuperAdmin ? "active" : ""}`}
+          onClick={() => {
+            setActiveRole("super_admin");
+            navigate("/super-admin");
+          }}
+          title="Super Admin: Multi-Tenant Platform Engine (http://localhost:5173/super-admin)"
           style={
-            activeRole === "super_admin"
+            isSuperAdmin
               ? { background: "linear-gradient(135deg, #4f46e5 0%, #db2777 100%)", color: "#fff" }
               : {}
           }
@@ -107,50 +122,65 @@ export const DemoSwitcherBar = () => {
         </button>
 
         <button
-          className={`demo-role-btn ${activeRole === "company_admin" ? "active" : ""}`}
-          onClick={() => setActiveRole("company_admin")}
-          title="Company Admin ATS Dashboard"
+          className={`demo-role-btn ${isEmployerAts ? "active" : ""}`}
+          onClick={() => {
+            setActiveRole("company_admin");
+            navigate("/employer-dashboard");
+          }}
+          title="Company Admin ATS Dashboard (http://localhost:5173/employer-dashboard)"
         >
           <Building2 size={12} />
           <span>Employer ATS</span>
         </button>
 
         <button
-          className={`demo-role-btn ${activeRole === "agency_portal" ? "active" : ""}`}
-          onClick={() => setActiveRole("agency_portal")}
-          title="Recruitment Agency Partner Portal"
+          className={`demo-role-btn ${isAgencyPortal ? "active" : ""}`}
+          onClick={() => {
+            setActiveRole("agency_portal");
+            navigate("/agency-portal");
+          }}
+          title="Recruitment Agency Partner Portal (http://localhost:5173/agency-portal)"
         >
           <Users2 size={12} />
           <span>Agency Portal</span>
         </button>
 
         <button
-          className={`demo-role-btn ${activeRole === "public_careers" ? "active" : ""}`}
-          onClick={() => setActiveRole("public_careers")}
-          title="Candidate-facing Public Career Portal"
+          className={`demo-role-btn ${isCareerSite ? "active" : ""}`}
+          onClick={() => {
+            setActiveRole("public_careers");
+            navigate(`/career-site/${getCompanySlug(company)}`);
+          }}
+          title={`${company?.name || "Company"} Career Portal (http://localhost:5173/career-site/${getCompanySlug(company)})`}
         >
           <Globe size={12} />
-          <span>Career Site</span>
+          <span>{company?.name ? `${company.name.split(" ")[0]} Careers` : "Career Site"}</span>
         </button>
 
         <button
-          className={`demo-role-btn ${activeRole === "experthire_platform" ? "active" : ""}`}
-          onClick={() => setActiveRole("experthire_platform")}
-          title="ExpertHire Direct Candidate Platform (Unified Job Board for All Companies)"
+          className={`demo-role-btn ${isExpertHire ? "active" : ""}`}
+          onClick={() => {
+            setActiveRole("experthire_platform");
+            navigate("/experthire-platform");
+          }}
+          title="ExpertHire Direct Candidate Platform (http://localhost:5173/experthire-platform)"
           style={
-            activeRole === "experthire_platform"
+            isExpertHire
               ? { background: "linear-gradient(135deg, #4f46e5 0%, #06b6d4 100%)", color: "#fff" }
               : {}
           }
         >
-          <Zap size={12} fill={activeRole === "experthire_platform" ? "#fff" : "currentColor"} />
+          <Zap size={12} fill={isExpertHire ? "#fff" : "currentColor"} />
           <span>ExpertHire Platform</span>
         </button>
 
         <button
-          className={`demo-role-btn ${activeRole === "iframe_simulator" ? "active" : ""}`}
-          onClick={() => setActiveRole("iframe_simulator")}
-          title="Embedded Iframe Widget"
+          className={`demo-role-btn ${isIframe ? "active" : ""}`}
+          onClick={() => {
+            setActiveRole("iframe_simulator");
+            navigate("/iframe-simulator");
+          }}
+          title="Embedded Iframe Widget (http://localhost:5173/iframe-simulator)"
         >
           <MonitorPlay size={12} />
           <span>Iframe</span>
@@ -159,7 +189,7 @@ export const DemoSwitcherBar = () => {
 
       {/* Micro Right Controls */}
       <div className="demo-topbar-right">
-        {activeRole === "company_admin" && (
+        {isEmployerAts && (
           <select
             style={{
               padding: "2px 6px",

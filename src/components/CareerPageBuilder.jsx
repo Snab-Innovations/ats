@@ -332,9 +332,9 @@ export const CareerPageBuilder = () => {
                     background: "var(--bg-surface)"
                   }}
                 >
-                  {company.coverImage && (
+                  {(company.coverBannerUrl || company.coverImage) && (
                     <img
-                      src={company.coverImage}
+                      src={company.coverBannerUrl || company.coverImage}
                       alt="Cover"
                       style={{
                         position: "absolute",
@@ -415,7 +415,7 @@ export const CareerPageBuilder = () => {
                       Open Positions ({jobs.filter((j) => j.status === "active").length})
                     </span>
                     <span style={{ fontSize: "0.75rem", color: "var(--primary)" }}>
-                      bharatscale.in/careers
+                      {(company?.domain || "company.com") + "/careers"}
                     </span>
                   </div>
 

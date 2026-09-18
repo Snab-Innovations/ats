@@ -12,7 +12,9 @@ import {
   ArrowRight,
   Sparkles,
   ShieldCheck,
-  Globe
+  Globe,
+  Database,
+  LogOut
 } from "lucide-react";
 
 export const SuperAdminSidebar = ({
@@ -28,7 +30,10 @@ export const SuperAdminSidebar = ({
     agencies,
     switchCompany,
     activeCompanyId,
-    setActiveRole
+    setActiveRole,
+    isDbConnected,
+    logout,
+    currentUser
   } = useAts();
 
   return (
@@ -37,19 +42,38 @@ export const SuperAdminSidebar = ({
       <div className="sidebar-brand-box">
         <div className="company-badge-row">
           <div
-            className="company-logo-avatar"
             style={{
-              background: "linear-gradient(135deg, #4f46e5 0%, #db2777 100%)",
-              boxShadow: "0 4px 12px rgba(79, 70, 229, 0.3)"
+              width: 44,
+              height: 44,
+              background: "transparent",
+              border: "none",
+              boxShadow: "none",
+              padding: 0,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              flexShrink: 0
             }}
           >
-            <ShieldAlert size={20} color="#fff" />
+            <img
+              src="/logo-exhier.png"
+              alt="ExpertHier"
+              style={{
+                width: "100%",
+                height: "100%",
+                objectFit: "contain",
+                background: "transparent",
+                border: "none",
+                boxShadow: "none",
+                mixBlendMode: "multiply"
+              }}
+            />
           </div>
 
           <div className="company-info">
             <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
               <h4>ExpertHire Engine</h4>
-              <span title="Super Admin Verified" style={{ color: "#db2777", display: "inline-flex" }}>
+              <span title="Super Admin Verified" style={{ color: "#4f46e5", display: "inline-flex" }}>
                 <ShieldCheck size={14} />
               </span>
             </div>
@@ -66,7 +90,7 @@ export const SuperAdminSidebar = ({
               justifyContent: "center",
               height: 34,
               fontWeight: 700,
-              background: "linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)"
+              background: "#4f46e5"
             }}
             onClick={onOpenNewCompanyModal}
           >
@@ -140,52 +164,100 @@ export const SuperAdminSidebar = ({
           <Palette size={17} />
           <span>Cover Presets & Theme</span>
         </button>
+
+        <div className="sidebar-nav-heading" style={{ marginTop: 6 }}>
+          Cloud Infrastructure
+        </div>
+
+        <button
+          className={`sidebar-nav-item ${activeTab === "database" ? "active" : ""}`}
+          onClick={() => setActiveTab("database")}
+        >
+          <Database size={17} />
+          <span>PostgreSQL & Storage</span>
+          <span
+            style={{
+              width: 7,
+              height: 7,
+              borderRadius: "50%",
+              marginLeft: "auto",
+              background: isDbConnected ? "#10b981" : "#f59e0b",
+              boxShadow: isDbConnected ? "0 0 6px #10b981" : "none"
+            }}
+            title={isDbConnected ? "Connected to Supabase PostgreSQL" : "Local Storage Mode"}
+          />
+        </button>
       </nav>
 
-      {/* Super Admin User Footer */}
-      <div className="sidebar-footer">
-        <div
-          className="user-avatar-sm"
-          style={{ background: "linear-gradient(135deg, #4f46e5 0%, #db2777 100%)" }}
-        >
-          SA
-        </div>
-        <div style={{ flex: 1, minWidth: 0, overflow: "hidden" }}>
+      {/* Super Admin User Footer & Sign Out */}
+      <div className="sidebar-footer" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0, flex: 1 }}>
           <div
-            style={{
-              fontSize: "0.825rem",
-              fontWeight: 700,
-              color: "var(--text-primary)",
-              whiteSpace: "nowrap",
-              overflow: "hidden",
-              textOverflow: "ellipsis"
-            }}
+            className="user-avatar-sm"
+            style={{ background: "#4f46e5" }}
           >
-            Platform Super Admin
+            SA
           </div>
-          <div
-            style={{
-              fontSize: "0.7rem",
-              color: "var(--text-muted)",
-              whiteSpace: "nowrap",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              display: "flex",
-              alignItems: "center",
-              gap: 4
-            }}
-          >
-            <span
+          <div style={{ flex: 1, minWidth: 0, overflow: "hidden" }}>
+            <div
               style={{
-                width: 5,
-                height: 5,
-                borderRadius: "50%",
-                background: "#10b981"
+                fontSize: "0.825rem",
+                fontWeight: 700,
+                color: "var(--text-primary)",
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis"
               }}
-            />
-            <span>Owner &bull; Master Controls</span>
+              title={currentUser?.name || "Platform Super Admin"}
+            >
+              {currentUser?.name || "Platform Super Admin"}
+            </div>
+            <div
+              style={{
+                fontSize: "0.7rem",
+                color: "var(--text-muted)",
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                display: "flex",
+                alignItems: "center",
+                gap: 4
+              }}
+              title={currentUser?.email || currentUser?.id || "Master Root Controls"}
+            >
+              <span
+                style={{
+                  width: 5,
+                  height: 5,
+                  borderRadius: "50%",
+                  background: "#10b981"
+                }}
+              />
+              <span>{currentUser?.email || currentUser?.id || "Master Root Controls"}</span>
+            </div>
           </div>
         </div>
+
+        <button
+          type="button"
+          onClick={logout}
+          className="btn btn-ghost btn-sm"
+          style={{
+            padding: "5px 8px",
+            height: 28,
+            color: "var(--text-muted)",
+            borderRadius: 6,
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 4,
+            fontSize: "0.7rem",
+            flexShrink: 0
+          }}
+          title="Sign Out to Login Portal"
+        >
+          <LogOut size={13} />
+          <span>Exit</span>
+        </button>
       </div>
     </aside>
   );

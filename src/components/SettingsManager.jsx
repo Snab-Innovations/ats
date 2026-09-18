@@ -21,7 +21,8 @@ import {
   Lock,
   Link2,
   RefreshCw,
-  X
+  X,
+  AlertTriangle
 } from "lucide-react";
 
 export const SettingsManager = () => {
@@ -39,6 +40,7 @@ export const SettingsManager = () => {
   const [saved, setSaved] = useState(false);
   const [copiedDns, setCopiedDns] = useState(false);
   const [isAddUserModalOpen, setIsAddUserModalOpen] = useState(false);
+  const [userToRevoke, setUserToRevoke] = useState(null);
   const [isCheckingDns, setIsCheckingDns] = useState(false);
   const [dnsVerified, setDnsVerified] = useState(true);
 
@@ -865,14 +867,10 @@ export const SettingsManager = () => {
                       </td>
                       <td style={{ textAlign: "right" }}>
                         <button
+                          type="button"
                           className="btn btn-ghost btn-sm btn-icon"
                           style={{ color: "#dc2626" }}
-                          onClick={() => {
-                            if (window.confirm(`Revoke access for ${user.name}?`)) {
-                              removeCompanyUser(user.id);
-                              showFeedback(`Revoked access for ${user.name}`);
-                            }
-                          }}
+                          onClick={() => setUserToRevoke(user)}
                           title="Revoke User Login"
                         >
                           <Trash2 size={15} />
@@ -1318,6 +1316,77 @@ export const SettingsManager = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL: CONFIRM REVOKE USER ACCESS */}
+      {/* ========================================================================= */}
+      {userToRevoke && (
+        <div className="modal-overlay" onClick={() => setUserToRevoke(null)}>
+          <div className="modal-content" style={{ maxWidth: 440 }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <div
+                  style={{
+                    width: 32,
+                    height: 32,
+                    borderRadius: "8px",
+                    background: "rgba(220, 38, 38, 0.1)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    color: "#dc2626"
+                  }}
+                >
+                  <AlertTriangle size={17} />
+                </div>
+                <h3 style={{ fontSize: "1.1rem", fontWeight: 800, margin: 0 }}>
+                  Revoke User Access
+                </h3>
+              </div>
+              <button
+                type="button"
+                className="btn btn-ghost btn-icon"
+                onClick={() => setUserToRevoke(null)}
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="modal-body" style={{ padding: "20px 24px" }}>
+              <p style={{ fontSize: "0.875rem", color: "var(--text-primary)", margin: "0 0 10px", lineHeight: 1.5 }}>
+                Are you sure you want to revoke access for <strong>{userToRevoke.name}</strong>?
+              </p>
+              <p style={{ fontSize: "0.8rem", color: "var(--text-secondary)", margin: 0, lineHeight: 1.5 }}>
+                This user will immediately be disabled and will not be able to log in to <strong>{company.name}</strong> with <strong>{userToRevoke.email}</strong>.
+              </p>
+            </div>
+
+            <div className="modal-footer" style={{ padding: "14px 24px", display: "flex", justifyContent: "flex-end", gap: 10 }}>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => setUserToRevoke(null)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                style={{ background: "#dc2626", border: "none" }}
+                onClick={() => {
+                  const userName = userToRevoke.name;
+                  removeCompanyUser(userToRevoke.id);
+                  setUserToRevoke(null);
+                  showFeedback(`Revoked access for ${userName}`);
+                }}
+              >
+                <Trash2 size={14} />
+                <span>Revoke Access</span>
+              </button>
+            </div>
           </div>
         </div>
       )}

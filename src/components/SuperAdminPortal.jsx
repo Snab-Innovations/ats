@@ -1,5 +1,7 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import { useParams, useNavigate } from "react-router-dom";
 import { useAts } from "../context/AtsContext";
+import { getCompanySlug } from "../utils/companySlug";
 import { SuperAdminSidebar } from "./SuperAdminSidebar";
 import {
   ShieldAlert,
@@ -33,7 +35,16 @@ import {
   Copy,
   Check,
   ShieldCheck,
-  RefreshCw
+  RefreshCw,
+  Database,
+  Server,
+  HardDrive,
+  Terminal,
+  CheckCheck,
+  Cloud,
+  AlertTriangle,
+  Upload,
+  Image
 } from "lucide-react";
 
 export const SuperAdminPortal = () => {
@@ -58,16 +69,62 @@ export const SuperAdminPortal = () => {
     setActiveRole,
     jobs,
     candidates,
-    coverPresets
+    coverPresets,
+    // Cloud Database & Storage (Supabase + Cloudflare R2)
+    dbConfig,
+    isDbConnected,
+    dbStatus,
+    isSyncing,
+    connectSupabase,
+    disconnectSupabase,
+    syncFromSupabase,
+    uploadImageToCloudinary
   } = useAts();
 
-  const [activeTab, setActiveTab] = useState("overview"); // 'overview' | 'companies' | 'agencies' | 'users' | 'branding'
+  const { tab } = useParams();
+  const navigate = useNavigate();
+
+  const getTabFromParam = (p) => {
+    if (!p) return "overview";
+    if (p === "tenants" || p === "companies") return "companies";
+    if (p === "database" || p === "storage" || p === "postgres" || p === "db") return "database";
+    if (p === "agencies") return "agencies";
+    if (p === "users" || p === "logins") return "users";
+    if (p === "branding" || p === "theme") return "branding";
+    return p;
+  };
+
+  const [activeTab, setActiveTabState] = useState(() => getTabFromParam(tab));
+
+  useEffect(() => {
+    if (tab) {
+      const normalized = getTabFromParam(tab);
+      if (normalized !== activeTab) {
+        setActiveTabState(normalized);
+      }
+    } else if (activeTab !== "overview") {
+      setActiveTabState("overview");
+    }
+  }, [tab]);
+
+  const setActiveTab = (newTab) => {
+    setActiveTabState(newTab);
+    const slug = newTab === "overview" ? "" : newTab;
+    navigate(slug ? `/super-admin/${slug}` : "/super-admin");
+  };
   const [companySearch, setCompanySearch] = useState("");
   const [companyStatusFilter, setCompanyStatusFilter] = useState("all");
   const [agencySearch, setAgencySearch] = useState("");
   const [agencyStatusFilter, setAgencyStatusFilter] = useState("all");
   const [userCompanyFilter, setUserCompanyFilter] = useState("all");
   const [userSearch, setUserSearch] = useState("");
+
+  // Cloud Database Form States
+  const [dbInputUrl, setDbInputUrl] = useState(dbConfig?.url || "");
+  const [dbInputKey, setDbInputKey] = useState(dbConfig?.anonKey || "");
+  const [isTestingDb, setIsTestingDb] = useState(false);
+  const [dbFeedback, setDbFeedback] = useState(null);
+  const [isSchemaCopied, setIsSchemaCopied] = useState(false);
 
   // Visible password toggle states
   const [visiblePasswords, setVisiblePasswords] = useState({});
@@ -83,31 +140,59 @@ export const SuperAdminPortal = () => {
   // Credentials Edit Modal (for either Company or Agency)
   const [isCredentialsModalOpen, setIsCredentialsModalOpen] = useState(false);
   const [credentialTarget, setCredentialTarget] = useState(null); // { type: 'company' | 'agency', data: object }
-  const [credentialForm, setCredentialForm] = useState({ email: "", password: "" });
+  const [credentialForm, setCredentialForm] = useState({ email: "", portalCode: "", password: "" });
+
+  // Revoke User Confirmation Modal State
+  const [userToRevoke, setUserToRevoke] = useState(null);
+  const [revokeFeedback, setRevokeFeedback] = useState(null);
+
+  // Delete Confirmation Modal States (Tenants & Agencies)
+  const [companyToDelete, setCompanyToDelete] = useState(null);
+  const [agencyToDelete, setAgencyToDelete] = useState(null);
+  const [deleteFeedback, setDeleteFeedback] = useState(null);
+
+  const handleConfirmDeleteCompany = () => {
+    if (!companyToDelete) return;
+    const name = companyToDelete.name;
+    removeCompanyTenant(companyToDelete.id);
+    setCompanyToDelete(null);
+    setDeleteFeedback(`Employer ATS Tenant "${name}" and all associated jobs and candidates have been deleted.`);
+    setTimeout(() => setDeleteFeedback(null), 5000);
+  };
+
+  const handleConfirmDeleteAgency = () => {
+    if (!agencyToDelete) return;
+    const name = agencyToDelete.name;
+    removeAgency(agencyToDelete.id);
+    setAgencyToDelete(null);
+    setDeleteFeedback(`Placement Agency "${name}" has been permanently removed.`);
+    setTimeout(() => setDeleteFeedback(null), 5000);
+  };
 
   // Generate strong random password
   const generateRandomPassword = () => {
-    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$%";
+    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$%&*";
     let pass = "";
-    for (let i = 0; i < 10; i++) {
+    for (let i = 0; i < 12; i++) {
       pass += chars.charAt(Math.floor(Math.random() * chars.length));
     }
-    return pass + "!";
+    return pass;
   };
 
   // New Company Form State
   const [newCompanyForm, setNewCompanyForm] = useState({
     name: "",
-    tagline: "",
     domain: "",
-    headquarters: "Bengaluru (Indiranagar)",
-    employeeCount: "100-500 Builders",
-    plan: "Enterprise Scale Tier",
-    primaryAdminName: "",
     primaryAdmin: "",
+    primaryAdminName: "",
     adminPassword: "Company#2026!",
+    headquarters: "Bengaluru, India",
+    plan: "Enterprise Scale Tier",
+    employeeCount: "50-250 Builders",
+    tagline: "",
     brandColor: "#4f46e5",
     accentColor: "#0284c7",
+    logoUrl: "",
     coverImage: coverPresets[0]?.url || ""
   });
 
@@ -122,12 +207,22 @@ export const SuperAdminPortal = () => {
     portalPassword: "Agency#2026Pass!",
     specialization: "Distributed Systems & Cloud",
     commissionTier: "8.33% (1 Month CTC)",
-    tier: "Elite Partner"
+    tier: "Elite Partner",
+    logoUrl: "",
+    coverImage: ""
   });
+
+  // Uploading states for direct Cloudinary upload
+  const [isUploadingCompanyLogo, setIsUploadingCompanyLogo] = useState(false);
+  const [isUploadingCompanyCover, setIsUploadingCompanyCover] = useState(false);
+  const [isUploadingAgencyLogo, setIsUploadingAgencyLogo] = useState(false);
+  const [isUploadingAgencyCover, setIsUploadingAgencyCover] = useState(false);
+  const [isUploadingBrandingLogo, setIsUploadingBrandingLogo] = useState(false);
+  const [isUploadingBrandingCover, setIsUploadingBrandingCover] = useState(false);
 
   // New User Form State
   const [newUserForm, setNewUserForm] = useState({
-    companyId: companies[0]?.id || "comp-bharat-101",
+    companyId: companies[0]?.id || "comp-mu5rn6mu",
     name: "",
     email: "",
     phone: "+91 ",
@@ -152,7 +247,7 @@ export const SuperAdminPortal = () => {
     setVisiblePasswords((prev) => ({ ...prev, [id]: !prev[id] }));
   };
 
-  const handleCopy = (id, text) => {
+  const copyToClipboard = (text, id) => {
     navigator.clipboard.writeText(text);
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 2000);
@@ -163,6 +258,7 @@ export const SuperAdminPortal = () => {
     setCredentialTarget({ type, data: item });
     setCredentialForm({
       email: type === "company" ? item.primaryAdmin || "" : item.email || "",
+      portalCode: type === "agency" ? item.portalCode || "" : "",
       password: type === "company" ? item.adminPassword || "Company#2026!" : item.portalPassword || "Agency#2026!"
     });
     setIsCredentialsModalOpen(true);
@@ -174,13 +270,14 @@ export const SuperAdminPortal = () => {
 
     if (credentialTarget.type === "company") {
       updateCompanyCredentials(credentialTarget.data.id, {
-        primaryAdmin: credentialForm.email,
-        adminPassword: credentialForm.password
+        primaryAdmin: credentialForm.email.trim(),
+        adminPassword: credentialForm.password.trim()
       });
     } else {
       updateAgency(credentialTarget.data.id, {
-        email: credentialForm.email,
-        portalPassword: credentialForm.password
+        email: credentialForm.email.trim(),
+        portalCode: credentialForm.portalCode ? credentialForm.portalCode.trim().toUpperCase() : credentialTarget.data.portalCode,
+        portalPassword: credentialForm.password.trim()
       });
     }
     setIsCredentialsModalOpen(false);
@@ -207,6 +304,96 @@ export const SuperAdminPortal = () => {
     setIsBrandingModalOpen(false);
   };
 
+  const handleCompanyLogoUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setIsUploadingCompanyLogo(true);
+    try {
+      const res = await uploadImageToCloudinary(file);
+      if (res?.success && res.url) {
+        setNewCompanyForm((prev) => ({ ...prev, logoUrl: res.url }));
+      }
+    } finally {
+      setIsUploadingCompanyLogo(false);
+      e.target.value = "";
+    }
+  };
+
+  const handleCompanyCoverUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setIsUploadingCompanyCover(true);
+    try {
+      const res = await uploadImageToCloudinary(file);
+      if (res?.success && res.url) {
+        setNewCompanyForm((prev) => ({ ...prev, coverImage: res.url }));
+      }
+    } finally {
+      setIsUploadingCompanyCover(false);
+      e.target.value = "";
+    }
+  };
+
+  const handleAgencyLogoUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setIsUploadingAgencyLogo(true);
+    try {
+      const res = await uploadImageToCloudinary(file);
+      if (res?.success && res.url) {
+        setNewAgencyForm((prev) => ({ ...prev, logoUrl: res.url }));
+      }
+    } finally {
+      setIsUploadingAgencyLogo(false);
+      e.target.value = "";
+    }
+  };
+
+  const handleAgencyCoverUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setIsUploadingAgencyCover(true);
+    try {
+      const res = await uploadImageToCloudinary(file);
+      if (res?.success && res.url) {
+        setNewAgencyForm((prev) => ({ ...prev, coverImage: res.url }));
+      }
+    } finally {
+      setIsUploadingAgencyCover(false);
+      e.target.value = "";
+    }
+  };
+
+  const handleBrandingLogoUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setIsUploadingBrandingLogo(true);
+    try {
+      const res = await uploadImageToCloudinary(file);
+      if (res?.success && res.url) {
+        setBrandingForm((prev) => ({ ...prev, logoUrl: res.url }));
+      }
+    } finally {
+      setIsUploadingBrandingLogo(false);
+      e.target.value = "";
+    }
+  };
+
+  const handleBrandingCoverUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setIsUploadingBrandingCover(true);
+    try {
+      const res = await uploadImageToCloudinary(file);
+      if (res?.success && res.url) {
+        setBrandingForm((prev) => ({ ...prev, coverImage: res.url }));
+      }
+    } finally {
+      setIsUploadingBrandingCover(false);
+      e.target.value = "";
+    }
+  };
+
   const handleCreateCompany = (e) => {
     e.preventDefault();
     if (!newCompanyForm.name.trim() || !newCompanyForm.primaryAdmin.trim()) return;
@@ -224,6 +411,7 @@ export const SuperAdminPortal = () => {
       adminPassword: "Company#2026!",
       brandColor: "#4f46e5",
       accentColor: "#0284c7",
+      logoUrl: "",
       coverImage: coverPresets[0]?.url || ""
     });
     setActiveTab("companies");
@@ -251,7 +439,9 @@ export const SuperAdminPortal = () => {
       portalPassword: "Agency#2026Pass!",
       specialization: "Distributed Systems & Cloud",
       commissionTier: "8.33% (1 Month CTC)",
-      tier: "Elite Partner"
+      tier: "Elite Partner",
+      logoUrl: "",
+      coverImage: ""
     });
     setActiveTab("agencies");
   };
@@ -262,7 +452,7 @@ export const SuperAdminPortal = () => {
     addCompanyUser(newUserForm);
     setIsNewUserModalOpen(false);
     setNewUserForm({
-      companyId: companies[0]?.id || "comp-bharat-101",
+      companyId: companies[0]?.id || "comp-mu5rn6mu",
       name: "",
       email: "",
       phone: "+91 ",
@@ -303,6 +493,126 @@ export const SuperAdminPortal = () => {
     return matchesCompany && matchesQuery;
   });
 
+  const getHeaderInfo = () => {
+    switch (activeTab) {
+      case "overview":
+        return {
+          title: "Platform Overview",
+          subtitle: "Global multi-tenant metrics, enterprise organizations, and candidate pipeline throughput",
+          actions: (
+            <div style={{ display: "flex", gap: 10 }}>
+              <button
+                className="btn btn-secondary btn-sm"
+                onClick={() => setIsNewAgencyModalOpen(true)}
+              >
+                <UsersRound size={14} />
+                <span>Register Agency</span>
+              </button>
+              <button
+                className="btn btn-primary btn-sm"
+                style={{ background: "#4f46e5" }}
+                onClick={() => setIsNewCompanyModalOpen(true)}
+              >
+                <PlusCircle size={15} />
+                <span>Create Company Tenant</span>
+              </button>
+            </div>
+          )
+        };
+      case "companies":
+        return {
+          title: "Employer ATS Tenants",
+          subtitle: `${companies.length} corporate workspaces provisioned with independent applicant tracking environments`,
+          actions: (
+            <button
+              className="btn btn-primary btn-sm"
+              style={{ background: "#4f46e5" }}
+              onClick={() => setIsNewCompanyModalOpen(true)}
+            >
+              <PlusCircle size={15} />
+              <span>Create Company Tenant</span>
+            </button>
+          )
+        };
+      case "agencies":
+        return {
+          title: "Placement Agencies",
+          subtitle: `${agencies.length} authorized recruitment consultancies and search partners with direct ATS mandate syndication`,
+          actions: (
+            <button
+              className="btn btn-primary btn-sm"
+              style={{ background: "#4f46e5" }}
+              onClick={() => setIsNewAgencyModalOpen(true)}
+            >
+              <PlusCircle size={15} />
+              <span>Register Agency</span>
+            </button>
+          )
+        };
+      case "users":
+        return {
+          title: "Company Team Logins",
+          subtitle: `${companyUsers.length} authorized corporate hiring managers and recruiters across workspaces`,
+          actions: (
+            <button
+              className="btn btn-primary btn-sm"
+              style={{ background: "#4f46e5" }}
+              onClick={() => setIsNewUserModalOpen(true)}
+            >
+              <PlusCircle size={15} />
+              <span>Add Team User</span>
+            </button>
+          )
+        };
+      case "branding":
+        return {
+          title: "Cover Presets & Branding",
+          subtitle: "Curated aesthetic themes, employer brand headers, and public career portal cover configurations",
+          actions: null
+        };
+      case "database":
+        return {
+          title: "PostgreSQL & Cloud Infrastructure",
+          subtitle: isDbConnected
+            ? "Connected to live Supabase PostgreSQL database and Cloudinary storage"
+            : "Running in local browser storage mode — connect Supabase for cross-device persistence",
+          actions: (
+            <span
+              style={{
+                fontSize: "0.75rem",
+                padding: "4px 10px",
+                borderRadius: "12px",
+                background: isDbConnected ? "rgba(16, 185, 129, 0.12)" : "rgba(245, 158, 11, 0.12)",
+                color: isDbConnected ? "#059669" : "#d97706",
+                fontWeight: 600,
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6
+              }}
+            >
+              <span
+                style={{
+                  width: 6,
+                  height: 6,
+                  borderRadius: "50%",
+                  background: isDbConnected ? "#10b981" : "#f59e0b"
+                }}
+              />
+              {isDbConnected ? "Database Live" : "Local Storage Mode"}
+            </span>
+          )
+        };
+      default:
+        return {
+          title: "Platform Administration",
+          subtitle: "Multi-tenant engine & workspace management",
+          actions: null
+        };
+    }
+  };
+
+  const headerInfo = getHeaderInfo();
+
   return (
     <div className="admin-shell">
       {/* Platform Owner Sidebar */}
@@ -315,11 +625,11 @@ export const SuperAdminPortal = () => {
       />
 
       <div className="admin-main" style={{ minHeight: "100vh" }}>
-        {/* Top Header */}
+        {/* Dynamic Context Header */}
         <header
           className="page-header"
           style={{
-            padding: "24px 32px",
+            padding: "20px 32px",
             borderBottom: "1px solid var(--border-subtle)",
             background: "var(--bg-surface)",
             display: "flex",
@@ -330,131 +640,24 @@ export const SuperAdminPortal = () => {
           }}
         >
           <div className="page-title-group">
-            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <span
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  width: 34,
-                  height: 34,
-                  borderRadius: "var(--radius-md)",
-                  background: "linear-gradient(135deg, #4f46e5 0%, #db2777 100%)",
-                  color: "#fff",
-                  boxShadow: "0 4px 12px rgba(79, 70, 229, 0.25)"
-                }}
-              >
-                <ShieldAlert size={19} />
-              </span>
-              <div>
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <h1 style={{ fontSize: "1.35rem", fontWeight: 800, margin: 0 }}>
-                    ExpertHire Super Admin Console
-                  </h1>
-                  <span className="badge badge-source-agency" style={{ fontSize: "0.725rem", padding: "2px 8px" }}>
-                    Multi-Tenant Master
-                  </span>
-                </div>
-                <p style={{ marginTop: 2, fontSize: "0.825rem", color: "var(--text-secondary)" }}>
-                  Create employer ATS company portals with login passwords, provision placement agencies, and manage access.
-                </p>
-              </div>
-            </div>
+            <h1 style={{ fontSize: "1.35rem", fontWeight: 800, margin: 0, letterSpacing: "-0.01em" }}>
+              {headerInfo.title}
+            </h1>
+            <p style={{ marginTop: 3, fontSize: "0.825rem", color: "var(--text-secondary)", margin: 0 }}>
+              {headerInfo.subtitle}
+            </p>
           </div>
 
-          <div className="header-actions" style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-            <button
-              className="btn btn-secondary btn-sm"
-              style={{ fontWeight: 600 }}
-              onClick={() => setIsNewUserModalOpen(true)}
-            >
-              <Users size={14} />
-              <span>Add Team User</span>
-            </button>
-            <button
-              className="btn btn-secondary btn-sm"
-              style={{ fontWeight: 600 }}
-              onClick={() => setIsNewAgencyModalOpen(true)}
-            >
-              <UsersRound size={14} />
-              <span>Register Agency</span>
-            </button>
-            <button
-              className="btn btn-primary btn-sm"
-              style={{
-                fontWeight: 700,
-                background: "linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)",
-                boxShadow: "0 4px 12px rgba(79, 70, 229, 0.3)"
-              }}
-              onClick={() => setIsNewCompanyModalOpen(true)}
-            >
-              <PlusCircle size={15} />
-              <span>Create Company Tenant</span>
-            </button>
-          </div>
+          {headerInfo.actions && (
+            <div className="header-actions">
+              {headerInfo.actions}
+            </div>
+          )}
         </header>
 
         {/* Main Content Area */}
         <div className="page-content" style={{ padding: "28px 32px 60px" }}>
-          {/* Super Admin Top Navigation Tabs Bar */}
-          <div
-            className="modal-tabs-container"
-            style={{
-              marginBottom: 24,
-              borderRadius: "var(--radius-md)",
-              border: "1px solid var(--border-subtle)",
-              background: "var(--bg-surface-elevated)"
-            }}
-          >
-            <button
-              type="button"
-              className={`modal-tab-btn ${activeTab === "overview" ? "active" : ""}`}
-              onClick={() => setActiveTab("overview")}
-            >
-              <Globe size={15} />
-              <span>Platform Overview</span>
-            </button>
-
-            <button
-              type="button"
-              className={`modal-tab-btn ${activeTab === "companies" ? "active" : ""}`}
-              onClick={() => setActiveTab("companies")}
-            >
-              <Building2 size={15} />
-              <span>Employer ATS Tenants ({companies.length})</span>
-            </button>
-
-            <button
-              type="button"
-              className={`modal-tab-btn ${activeTab === "agencies" ? "active" : ""}`}
-              onClick={() => setActiveTab("agencies")}
-            >
-              <UsersRound size={15} />
-              <span>Placement Agencies ({agencies.length})</span>
-            </button>
-
-            <button
-              type="button"
-              className={`modal-tab-btn ${activeTab === "users" ? "active" : ""}`}
-              onClick={() => setActiveTab("users")}
-            >
-              <Users size={15} />
-              <span>Company Team Logins ({companyUsers.length})</span>
-            </button>
-
-            <button
-              type="button"
-              className={`modal-tab-btn ${activeTab === "branding" ? "active" : ""}`}
-              onClick={() => setActiveTab("branding")}
-            >
-              <Palette size={15} />
-              <span>Cover Presets & Branding</span>
-            </button>
-          </div>
-
-          {/* ========================================================================= */}
           {/* TAB 1: PLATFORM OVERVIEW & GLOBAL DASHBOARD */}
-          {/* ========================================================================= */}
           {activeTab === "overview" && (
             <div>
               {/* Global KPI Metrics */}
@@ -473,10 +676,10 @@ export const SuperAdminPortal = () => {
                   </div>
                 </div>
 
-                <div className="kpi-card kpi-accent-fuchsia" onClick={() => setActiveTab("agencies")} style={{ cursor: "pointer" }}>
+                <div className="kpi-card" onClick={() => setActiveTab("agencies")} style={{ cursor: "pointer" }}>
                   <div className="kpi-header">
                     <span className="kpi-title">Placement Agencies</span>
-                    <div className="kpi-icon-wrap" style={{ background: "rgba(219, 39, 119, 0.1)", color: "#db2777" }}>
+                    <div className="kpi-icon-wrap" style={{ background: "rgba(2, 132, 199, 0.1)", color: "#0284c7" }}>
                       <UsersRound size={18} />
                     </div>
                   </div>
@@ -574,8 +777,8 @@ export const SuperAdminPortal = () => {
                             width: 38,
                             height: 38,
                             borderRadius: "10px",
-                            background: "rgba(219, 39, 119, 0.12)",
-                            color: "#db2777",
+                            background: "rgba(79, 70, 229, 0.1)",
+                            color: "#4f46e5",
                             display: "flex",
                             alignItems: "center",
                             justifyContent: "center"
@@ -589,7 +792,7 @@ export const SuperAdminPortal = () => {
                         </div>
                       </div>
                       <p style={{ fontSize: "0.78rem", color: "var(--text-secondary)", lineHeight: 1.5, margin: 0 }}>
-                        Connect staffing consultancy, issue unique agency portal code, commission tier, and set agency login password.
+                        Connect staffing consultancy, issue unique agency portal code, commission tier, and set agency access.
                       </p>
                     </div>
                     <button
@@ -597,14 +800,13 @@ export const SuperAdminPortal = () => {
                       style={{
                         width: "100%",
                         justifyContent: "center",
-                        background: "linear-gradient(135deg, #ec4899 0%, #8b5cf6 100%)",
-                        fontWeight: 700,
-                        boxShadow: "0 2px 8px rgba(236, 72, 153, 0.25)"
+                        background: "#4f46e5",
+                        fontWeight: 700
                       }}
                       onClick={() => setIsNewAgencyModalOpen(true)}
                     >
                       <PlusCircle size={14} />
-                      <span>Register Agency & Password</span>
+                      <span>Register Agency & Activate</span>
                     </button>
                   </div>
 
@@ -789,6 +991,15 @@ export const SuperAdminPortal = () => {
                                   <LogIn size={12} />
                                   <span>Enter ATS</span>
                                 </button>
+                                <button
+                                  type="button"
+                                  className="btn btn-ghost btn-sm"
+                                  style={{ color: "#ef4444", padding: "4px 6px", height: "auto" }}
+                                  onClick={() => setCompanyToDelete(comp)}
+                                  title="Delete Employer ATS Tenant"
+                                >
+                                  <Trash2 size={13} />
+                                </button>
                               </div>
                             </td>
                           </tr>
@@ -806,6 +1017,36 @@ export const SuperAdminPortal = () => {
           {/* ========================================================================= */}
           {activeTab === "companies" && (
             <div>
+              {deleteFeedback && (
+                <div
+                  style={{
+                    padding: "10px 16px",
+                    borderRadius: 8,
+                    background: "rgba(16, 185, 129, 0.1)",
+                    border: "1px solid rgba(16, 185, 129, 0.25)",
+                    color: "#059669",
+                    fontSize: "0.825rem",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    marginBottom: 16
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <CheckCircle size={16} />
+                    <span>{deleteFeedback}</span>
+                  </div>
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    style={{ padding: "2px 6px", height: "auto", color: "#059669" }}
+                    onClick={() => setDeleteFeedback(null)}
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+              )}
+
               {/* Filter and Action Bar */}
               <div
                 style={{
@@ -1047,8 +1288,8 @@ export const SuperAdminPortal = () => {
 
                         {/* Card Actions Footer */}
                         <div className="admin-card-footer">
-                          {/* Secondary Actions: Brand, Credentials, Suspend */}
-                          <div className="admin-card-actions-grid-3">
+                          {/* Secondary Actions: Brand, Credentials, Suspend & Delete */}
+                          <div className="admin-card-actions-grid-3" style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 6 }}>
                             <button
                               type="button"
                               className="btn-card-action btn-card-neutral"
@@ -1078,6 +1319,17 @@ export const SuperAdminPortal = () => {
                               {comp.status === "Active" ? <ShieldAlert size={13} /> : <Check size={13} />}
                               <span>{comp.status === "Active" ? "Suspend" : "Activate"}</span>
                             </button>
+
+                            <button
+                              type="button"
+                              className="btn-card-action"
+                              style={{ color: "#ef4444", borderColor: "rgba(239, 68, 68, 0.25)" }}
+                              onClick={() => setCompanyToDelete(comp)}
+                              title="Delete Employer ATS Tenant"
+                            >
+                              <Trash2 size={13} />
+                              <span>Delete</span>
+                            </button>
                           </div>
 
                           {/* Primary Action: Full-width Portal Access CTA */}
@@ -1091,6 +1343,29 @@ export const SuperAdminPortal = () => {
                           >
                             <LogIn size={14} />
                             <span>Login to ATS &rarr;</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            className="btn btn-ghost btn-sm"
+                            style={{
+                              width: "100%",
+                              justifyContent: "center",
+                              marginTop: 6,
+                              fontSize: "0.75rem",
+                              gap: 6,
+                              color: "var(--text-secondary)",
+                              border: "1px solid var(--border-subtle)",
+                              borderRadius: "var(--radius-sm)"
+                            }}
+                            onClick={() => {
+                              switchCompany(comp.id);
+                              navigate(`/career-site/${getCompanySlug(comp)}`);
+                            }}
+                            title={`Open ${comp.name} Public Career Site (/career-site/${getCompanySlug(comp)})`}
+                          >
+                            <Globe size={13} color="var(--primary)" />
+                            <span>View Career Site (/{getCompanySlug(comp)}-careers)</span>
                           </button>
                         </div>
                       </div>
@@ -1106,6 +1381,36 @@ export const SuperAdminPortal = () => {
           {/* ========================================================================= */}
           {activeTab === "agencies" && (
             <div>
+              {deleteFeedback && (
+                <div
+                  style={{
+                    padding: "10px 16px",
+                    borderRadius: 8,
+                    background: "rgba(16, 185, 129, 0.1)",
+                    border: "1px solid rgba(16, 185, 129, 0.25)",
+                    color: "#059669",
+                    fontSize: "0.825rem",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    marginBottom: 16
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <CheckCircle size={16} />
+                    <span>{deleteFeedback}</span>
+                  </div>
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    style={{ padding: "2px 6px", height: "auto", color: "#059669" }}
+                    onClick={() => setDeleteFeedback(null)}
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+              )}
+
               {/* Filter and Action Bar */}
               <div
                 style={{
@@ -1151,8 +1456,7 @@ export const SuperAdminPortal = () => {
                     className="btn btn-primary"
                     style={{
                       fontWeight: 700,
-                      background: "linear-gradient(135deg, #db2777 0%, #8b5cf6 100%)",
-                      boxShadow: "0 4px 12px rgba(219, 39, 119, 0.3)"
+                      background: "#4f46e5"
                     }}
                     onClick={() => setIsNewAgencyModalOpen(true)}
                   >
@@ -1163,10 +1467,33 @@ export const SuperAdminPortal = () => {
               </div>
 
               {/* Grid of Agency Partner Cards */}
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(360px, 1fr))", gap: 20 }}>
-                {filteredAgencies.map((agy) => {
-                  const passVisible = visiblePasswords[`agy-${agy.id}`];
-                  const passText = agy.portalPassword || "Agency#2026Pass!";
+              {filteredAgencies.length === 0 ? (
+                <div
+                  style={{
+                    textAlign: "center",
+                    padding: "60px 24px",
+                    background: "var(--bg-surface)",
+                    borderRadius: "14px",
+                    border: "1px dashed var(--border-medium)"
+                  }}
+                >
+                  <UsersRound size={42} style={{ color: "var(--text-muted)", margin: "0 auto 12px", opacity: 0.5 }} />
+                  <h3 style={{ fontSize: "1.15rem", fontWeight: 800, margin: "0 0 6px" }}>No Placement Agencies Registered</h3>
+                  <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)", maxWidth: 420, margin: "0 auto 16px" }}>
+                    Registered recruitment agencies will appear here with dedicated portal access and fee management.
+                  </p>
+                  <button
+                    className="btn btn-primary btn-sm"
+                    style={{ background: "#4f46e5", fontWeight: 700 }}
+                    onClick={() => setIsNewAgencyModalOpen(true)}
+                  >
+                    <PlusCircle size={15} />
+                    <span>Register Agency</span>
+                  </button>
+                </div>
+              ) : (
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(360px, 1fr))", gap: 20 }}>
+                  {filteredAgencies.map((agy) => {
                   const isActive = (agy.status || "active").toLowerCase() === "active";
 
                   return (
@@ -1191,11 +1518,12 @@ export const SuperAdminPortal = () => {
                               style={{
                                 width: 44,
                                 height: 44,
-                                borderRadius: "12px",
-                                background: agy.logoColor || "linear-gradient(135deg, #db2777 0%, #8b5cf6 100%)",
-                                color: "#fff",
+                                borderRadius: "10px",
+                                background: "rgba(79, 70, 229, 0.08)",
+                                border: "1px solid rgba(79, 70, 229, 0.2)",
+                                color: "#4f46e5",
                                 fontWeight: 800,
-                                fontSize: "1rem",
+                                fontSize: "0.95rem",
                                 display: "flex",
                                 alignItems: "center",
                                 justifyContent: "center"
@@ -1223,66 +1551,33 @@ export const SuperAdminPortal = () => {
                           Specialization: <strong>{agy.specialization || "Distributed Systems & Cloud"}</strong>
                         </p>
 
-                        {/* Agency Portal Credentials Box */}
+                        {/* Partner Portal Access Box */}
                         <div
                           style={{
                             background: "var(--bg-surface-elevated)",
-                            padding: "12px 14px",
-                            borderRadius: "10px",
+                            padding: "10px 14px",
+                            borderRadius: "8px",
                             fontSize: "0.775rem",
                             marginBottom: 14,
                             border: "1px solid var(--border-subtle)"
                           }}
                         >
                           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
-                            <span style={{ fontWeight: 700, color: "#db2777", display: "flex", alignItems: "center", gap: 5 }}>
-                              <Key size={12} />
-                              <span>Agency Portal Login Pass</span>
+                            <span style={{ fontWeight: 700, color: "var(--text-primary)", display: "flex", alignItems: "center", gap: 5 }}>
+                              <ShieldCheck size={13} color="#4f46e5" />
+                              <span>Partner Portal Access</span>
                             </span>
-                            <button
-                              className="btn btn-ghost btn-sm"
-                              style={{ fontSize: "0.7rem", padding: "1px 6px", height: "auto" }}
-                              onClick={() => handleOpenCredentials("agency", agy)}
-                            >
-                              Edit Pass
-                            </button>
+                            <span style={{ fontSize: "0.7rem", color: "#059669", fontWeight: 600 }}>Active License</span>
                           </div>
 
                           <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                            <span style={{ color: "var(--text-muted)" }}>Portal Code / ID:</span>
-                            <span style={{ fontWeight: 700, fontFamily: "var(--font-mono)" }}>{agy.portalCode || agy.id}</span>
+                            <span style={{ color: "var(--text-muted)" }}>Portal ID:</span>
+                            <span style={{ fontWeight: 600, fontFamily: "var(--font-mono)", color: "var(--text-primary)" }}>{agy.portalCode || agy.id}</span>
                           </div>
 
-                          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                            <span style={{ color: "var(--text-muted)" }}>Login Email:</span>
-                            <span style={{ fontWeight: 600, fontFamily: "var(--font-mono)" }}>{agy.email}</span>
-                          </div>
-
-                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                            <span style={{ color: "var(--text-muted)" }}>Password:</span>
-                            <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                              <span style={{ fontWeight: 700, fontFamily: "var(--font-mono)", color: "var(--text-primary)" }}>
-                                {passVisible ? passText : "••••••••••••"}
-                              </span>
-                              <button
-                                type="button"
-                                className="btn btn-ghost btn-icon btn-sm"
-                                style={{ width: 22, height: 22, padding: 0 }}
-                                onClick={() => togglePasswordVisibility(`agy-${agy.id}`)}
-                                title={passVisible ? "Hide password" : "Show password"}
-                              >
-                                {passVisible ? <EyeOff size={12} /> : <Eye size={12} />}
-                              </button>
-                              <button
-                                type="button"
-                                className="btn btn-ghost btn-icon btn-sm"
-                                style={{ width: 22, height: 22, padding: 0 }}
-                                onClick={() => handleCopy(`agy-${agy.id}`, passText)}
-                                title="Copy password"
-                              >
-                                {copiedId === `agy-${agy.id}` ? <Check size={12} color="#059669" /> : <Copy size={12} />}
-                              </button>
-                            </div>
+                          <div style={{ display: "flex", justifyContent: "space-between" }}>
+                            <span style={{ color: "var(--text-muted)" }}>Authorized Contact:</span>
+                            <span style={{ fontWeight: 600, color: "var(--text-primary)" }}>{agy.email}</span>
                           </div>
                         </div>
 
@@ -1324,8 +1619,8 @@ export const SuperAdminPortal = () => {
 
                       {/* Card Actions Footer */}
                       <div className="admin-card-footer">
-                        {/* Secondary Actions: Suspend / Activate & Credentials */}
-                        <div className="admin-card-actions-grid">
+                        {/* Secondary Actions: Suspend / Activate, Credentials & Delete */}
+                        <div className="admin-card-actions-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6 }}>
                           <button
                             type="button"
                             className={`btn-card-action ${isActive ? "btn-card-suspend" : "btn-card-activate"}`}
@@ -1342,8 +1637,19 @@ export const SuperAdminPortal = () => {
                             onClick={() => handleOpenCredentials("agency", agy)}
                             title="Manage agency portal login credentials"
                           >
-                            <Key size={13} style={{ color: "#ec4899" }} />
+                            <Key size={13} style={{ color: "var(--text-secondary)" }} />
                             <span>Credentials</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            className="btn-card-action"
+                            style={{ color: "#ef4444", borderColor: "rgba(239, 68, 68, 0.25)" }}
+                            onClick={() => setAgencyToDelete(agy)}
+                            title="Delete placement agency partner"
+                          >
+                            <Trash2 size={13} />
+                            <span>Delete</span>
                           </button>
                         </div>
 
@@ -1364,6 +1670,7 @@ export const SuperAdminPortal = () => {
                   );
                 })}
               </div>
+            )}
             </div>
           )}
 
@@ -1411,6 +1718,34 @@ export const SuperAdminPortal = () => {
                 </button>
               </div>
 
+              {/* Feedback Banner */}
+              {revokeFeedback && (
+                <div
+                  style={{
+                    padding: "10px 16px",
+                    borderRadius: "8px",
+                    background: "rgba(16, 185, 129, 0.1)",
+                    border: "1px solid rgba(16, 185, 129, 0.3)",
+                    color: "#059669",
+                    fontSize: "0.825rem",
+                    fontWeight: 600,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    marginBottom: 16
+                  }}
+                >
+                  <span>{revokeFeedback}</span>
+                  <button
+                    type="button"
+                    onClick={() => setRevokeFeedback(null)}
+                    style={{ color: "inherit", cursor: "pointer", display: "flex", alignItems: "center" }}
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+              )}
+
               {/* Table of Team Logins */}
               <div className="card" style={{ padding: 0, overflow: "hidden" }}>
                 <div className="table-responsive">
@@ -1426,7 +1761,18 @@ export const SuperAdminPortal = () => {
                       </tr>
                     </thead>
                     <tbody>
-                      {filteredUsers.map((user) => {
+                      {filteredUsers.length === 0 ? (
+                        <tr>
+                          <td colSpan={7} style={{ textAlign: "center", padding: "50px 20px", color: "var(--text-secondary)" }}>
+                            <Users size={36} style={{ color: "var(--text-muted)", margin: "0 auto 10px", opacity: 0.5 }} />
+                            <div style={{ fontWeight: 700, fontSize: "0.95rem" }}>No Team Logins Configured</div>
+                            <div style={{ fontSize: "0.8rem", color: "var(--text-muted)", marginTop: 4 }}>
+                              Click "Add Team Member Login" to provision credentials for a recruiter or hiring manager.
+                            </div>
+                          </td>
+                        </tr>
+                      ) : (
+                        filteredUsers.map((user) => {
                         const targetCompany = companies.find((c) => c.id === user.companyId);
 
                         return (
@@ -1435,7 +1781,7 @@ export const SuperAdminPortal = () => {
                               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                                 <div
                                   className="user-avatar-sm"
-                                  style={{ background: "linear-gradient(135deg, #0284c7 0%, #4f46e5 100%)" }}
+                                  style={{ background: "#4f46e5" }}
                                 >
                                   {user.name.split(" ").map((n) => n[0]).join("").slice(0, 2)}
                                 </div>
@@ -1453,13 +1799,38 @@ export const SuperAdminPortal = () => {
                             </td>
                             <td>
                               <span
-                                className={`badge ${
+                                className="badge"
+                                style={
                                   user.role === "Company Admin"
-                                    ? "badge-source-agency"
+                                    ? {
+                                        background: "rgba(79, 70, 229, 0.08)",
+                                        color: "#4f46e5",
+                                        border: "1px solid rgba(79, 70, 229, 0.2)",
+                                        borderRadius: 12,
+                                        padding: "2px 8px",
+                                        fontSize: "0.725rem",
+                                        fontWeight: 600
+                                      }
                                     : user.role === "Lead Tech Recruiter"
-                                    ? "badge-source-direct"
-                                    : "badge-source-referral"
-                                }`}
+                                    ? {
+                                        background: "rgba(2, 132, 199, 0.08)",
+                                        color: "#0284c7",
+                                        border: "1px solid rgba(2, 132, 199, 0.2)",
+                                        borderRadius: 12,
+                                        padding: "2px 8px",
+                                        fontSize: "0.725rem",
+                                        fontWeight: 600
+                                      }
+                                    : {
+                                        background: "rgba(16, 185, 129, 0.08)",
+                                        color: "#059669",
+                                        border: "1px solid rgba(16, 185, 129, 0.2)",
+                                        borderRadius: 12,
+                                        padding: "2px 8px",
+                                        fontSize: "0.725rem",
+                                        fontWeight: 600
+                                      }
+                                }
                               >
                                 {user.role}
                               </span>
@@ -1479,13 +1850,10 @@ export const SuperAdminPortal = () => {
                             <td style={{ fontSize: "0.775rem", color: "var(--text-muted)" }}>{user.lastLogin || "Recent"}</td>
                             <td style={{ textAlign: "right" }}>
                               <button
+                                type="button"
                                 className="btn btn-ghost btn-sm btn-icon"
                                 style={{ color: "#dc2626" }}
-                                onClick={() => {
-                                  if (window.confirm(`Revoke login access for ${user.name}?`)) {
-                                    removeCompanyUser(user.id);
-                                  }
-                                }}
+                                onClick={() => setUserToRevoke(user)}
                                 title="Revoke User Access"
                               >
                                 <Trash2 size={15} />
@@ -1493,7 +1861,7 @@ export const SuperAdminPortal = () => {
                             </td>
                           </tr>
                         );
-                      })}
+                      }))}
                     </tbody>
                   </table>
                 </div>
@@ -1537,6 +1905,427 @@ export const SuperAdminPortal = () => {
                     </div>
                   </div>
                 ))}
+              </div>
+            </div>
+          )}
+
+          {/* ========================================================================= */}
+          {/* TAB 6: CLOUD INFRASTRUCTURE (SUPABASE POSTGRESQL + CLOUDFLARE R2) */}
+          {/* ========================================================================= */}
+          {activeTab === "database" && (
+            <div>
+              {/* Header Info */}
+              <div style={{ marginBottom: 22, display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 14 }}>
+                <div>
+                  <h3 style={{ fontSize: "1.15rem", fontWeight: 800, margin: 0, display: "flex", alignItems: "center", gap: 8 }}>
+                    <Database size={20} color="var(--primary)" />
+                    <span>Cloud PostgreSQL & Cloudflare R2 Infrastructure</span>
+                  </h3>
+                  <p style={{ fontSize: "0.825rem", color: "var(--text-secondary)", marginTop: 4, margin: 0 }}>
+                    Scalable multi-tenant architecture designed to handle 1,000+ companies, 1,000,000+ candidate records, and zero-egress resume storage.
+                  </p>
+                </div>
+
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    onClick={syncFromSupabase}
+                    disabled={isSyncing}
+                    style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
+                  >
+                    <RefreshCw size={13} className={isSyncing ? "spin" : ""} />
+                    <span>{isSyncing ? "Syncing PostgreSQL..." : "Sync Live DB"}</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Status Banner */}
+              <div
+                className="card"
+                style={{
+                  background: isDbConnected ? "rgba(16, 185, 129, 0.05)" : "rgba(245, 158, 11, 0.05)",
+                  border: isDbConnected ? "1px solid rgba(16, 185, 129, 0.3)" : "1px solid rgba(245, 158, 11, 0.3)",
+                  padding: "16px 20px",
+                  marginBottom: 24,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: 16,
+                  flexWrap: "wrap"
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                  <div
+                    style={{
+                      width: 40,
+                      height: 40,
+                      borderRadius: "10px",
+                      background: isDbConnected ? "rgba(16, 185, 129, 0.15)" : "rgba(245, 158, 11, 0.15)",
+                      color: isDbConnected ? "#059669" : "#d97706",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      flexShrink: 0
+                    }}
+                  >
+                    <Server size={20} />
+                  </div>
+                  <div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <h4 style={{ fontSize: "0.95rem", fontWeight: 800, margin: 0 }}>
+                        {isDbConnected ? "Live Supabase PostgreSQL Connected" : "Local Storage Engine (Ready to Connect Live DB)"}
+                      </h4>
+                      <span
+                        className={`badge ${isDbConnected ? "badge-active" : "badge-paused"}`}
+                        style={{ fontSize: "0.7rem", padding: "2px 8px" }}
+                      >
+                        {isDbConnected ? "LIVE CLOUD" : "LOCAL FALLBACK"}
+                      </span>
+                    </div>
+                    <p style={{ fontSize: "0.775rem", color: "var(--text-secondary)", margin: 0, marginTop: 4 }}>
+                      {dbStatus.message}
+                    </p>
+                  </div>
+                </div>
+
+                {dbStatus.lastSynced && (
+                  <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>
+                    Last Synced: {dbStatus.lastSynced}
+                  </div>
+                )}
+              </div>
+
+              {/* 2-Column Grid: DB Settings & Storage */}
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(360px, 1fr))", gap: 20, marginBottom: 24 }}>
+                {/* Column 1: Supabase Credentials */}
+                <div className="card" style={{ padding: 22 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16, borderBottom: "1px solid var(--border-subtle)", paddingBottom: 12 }}>
+                    <div style={{ width: 34, height: 34, borderRadius: "8px", background: "rgba(79, 70, 229, 0.1)", color: "var(--primary)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                      <Terminal size={17} />
+                    </div>
+                    <div>
+                      <h4 style={{ fontSize: "0.95rem", fontWeight: 800, margin: 0 }}>Supabase PostgreSQL Credentials</h4>
+                      <span style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>Supabase Dashboard &rarr; Project Settings &rarr; API</span>
+                    </div>
+                  </div>
+
+                  <form
+                    onSubmit={async (e) => {
+                      e.preventDefault();
+                      setIsTestingDb(true);
+                      setDbFeedback(null);
+                      await connectSupabase(dbInputUrl, dbInputKey);
+                      setIsTestingDb(false);
+                    }}
+                    style={{ display: "flex", flexDirection: "column", gap: 14 }}
+                  >
+                    <div className="form-group">
+                      <label className="form-label" style={{ fontSize: "0.775rem" }}>
+                        Supabase Project URL *
+                      </label>
+                      <input
+                        type="url"
+                        required
+                        placeholder="https://xyzcompany.supabase.co"
+                        className="form-input"
+                        style={{ fontFamily: "var(--font-mono)", fontSize: "0.8rem" }}
+                        value={dbInputUrl}
+                        onChange={(e) => setDbInputUrl(e.target.value)}
+                      />
+                    </div>
+
+                    <div className="form-group">
+                      <label className="form-label" style={{ fontSize: "0.775rem" }}>
+                        Supabase Anonymous Public API Key *
+                      </label>
+                      <input
+                        type="password"
+                        required
+                        placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                        className="form-input"
+                        style={{ fontFamily: "var(--font-mono)", fontSize: "0.8rem" }}
+                        value={dbInputKey}
+                        onChange={(e) => setDbInputKey(e.target.value)}
+                      />
+                    </div>
+
+                    {dbFeedback && (
+                      <div
+                        style={{
+                          padding: "8px 12px",
+                          borderRadius: "8px",
+                          fontSize: "0.775rem",
+                          background: dbFeedback.success ? "rgba(16, 185, 129, 0.1)" : "rgba(239, 68, 68, 0.1)",
+                          color: dbFeedback.success ? "#059669" : "#dc2626",
+                          border: dbFeedback.success ? "1px solid rgba(16, 185, 129, 0.25)" : "1px solid rgba(239, 68, 68, 0.25)"
+                        }}
+                      >
+                        {dbFeedback.message}
+                      </div>
+                    )}
+
+                    <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
+                      <button
+                        type="submit"
+                        className="btn btn-primary btn-sm"
+                        disabled={isTestingDb}
+                        style={{
+                          flex: 1,
+                          justifyContent: "center",
+                          background: "linear-gradient(135deg, #4f46e5 0%, #0284c7 100%)",
+                          fontWeight: 700
+                        }}
+                      >
+                        <Zap size={14} />
+                        <span>{isTestingDb ? "Connecting..." : "Test & Connect Live"}</span>
+                      </button>
+
+                      {isDbConnected && (
+                        <button
+                          type="button"
+                          className="btn btn-secondary btn-sm"
+                          onClick={() => {
+                            disconnectSupabase();
+                            setDbInputUrl("");
+                            setDbInputKey("");
+                          }}
+                          style={{ fontSize: "0.75rem", color: "#dc2626" }}
+                        >
+                          Disconnect
+                        </button>
+                      )}
+                    </div>
+                  </form>
+                </div>
+
+                {/* Column 2: Cloud Storage (Cloud Name: ljelkpy4, Preset: resumes) */}
+                <div className="card" style={{ padding: 22 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16, borderBottom: "1px solid var(--border-subtle)", paddingBottom: 12 }}>
+                    <div style={{ width: 34, height: 34, borderRadius: "8px", background: "rgba(16, 185, 129, 0.1)", color: "#10b981", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                      <HardDrive size={17} />
+                    </div>
+                    <div>
+                      <h4 style={{ fontSize: "0.95rem", fontWeight: 800, margin: 0 }}>Cloud Document & Resume Storage</h4>
+                      <span style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>Direct CDN upload for candidate PDF / DOCX resumes</span>
+                    </div>
+                    <span style={{ marginLeft: "auto", fontSize: "0.68rem", fontWeight: 700, padding: "2px 8px", borderRadius: 4, background: "rgba(16, 185, 129, 0.12)", color: "#10b981", border: "1px solid rgba(16, 185, 129, 0.3)" }}>
+                      Active & Live
+                    </span>
+                  </div>
+
+                  <div style={{ display: "flex", flexDirection: "column", gap: 12, fontSize: "0.8rem", color: "var(--text-secondary)" }}>
+                    <div style={{ background: "var(--bg-surface-elevated)", padding: 12, borderRadius: "8px", border: "1px solid var(--border-subtle)" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                        <span style={{ color: "var(--text-muted)" }}>Cloud Name:</span>
+                        <strong style={{ fontFamily: "var(--font-mono)", color: "var(--primary)" }}>ljelkpy4</strong>
+                      </div>
+                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                        <span style={{ color: "var(--text-muted)" }}>Upload Preset:</span>
+                        <strong style={{ fontFamily: "var(--font-mono)", color: "#059669" }}>resumes</strong>
+                      </div>
+                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                        <span style={{ color: "var(--text-muted)" }}>Delivery Protocol:</span>
+                        <strong>Global HTTPS CDN</strong>
+                      </div>
+                      <div style={{ display: "flex", justifyContent: "space-between" }}>
+                        <span style={{ color: "var(--text-muted)" }}>Database Sync:</span>
+                        <strong style={{ color: "#059669" }}>Auto-linked to candidates table</strong>
+                      </div>
+                    </div>
+
+                    <div style={{ padding: "10px 12px", background: "rgba(16, 185, 129, 0.06)", borderRadius: "8px", border: "1px solid rgba(16, 185, 129, 0.2)" }}>
+                      <strong style={{ color: "#059669", display: "block", marginBottom: 4 }}>How It Works in Production</strong>
+                      <span>
+                        When applicants submit resumes on the career site or unified platform, files are uploaded directly to cloud name <strong>ljelkpy4</strong> using preset <strong>resumes</strong>. The permanent secure HTTPS link is stored into your live Supabase database with zero local disk usage.
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Bottom Card: 1-Click PostgreSQL Schema SQL */}
+              <div className="card" style={{ padding: 22 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14, flexWrap: "wrap", gap: 10 }}>
+                  <div>
+                    <h4 style={{ fontSize: "1rem", fontWeight: 800, margin: 0, display: "flex", alignItems: "center", gap: 8 }}>
+                      <Cloud size={18} color="var(--primary)" />
+                      <span>PostgreSQL Multi-Tenant Schema Setup (schema.sql)</span>
+                    </h4>
+                    <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
+                      Pre-configured with multi-tenant tables, UUID indexes, storage buckets, and starter tenant data.
+                    </span>
+                  </div>
+
+                  <button
+                    type="button"
+                    className="btn btn-primary btn-sm"
+                    onClick={() => {
+                      const sqlContent = `-- EXPERTHIRE ATS: POSTGRESQL SCHEMA
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+CREATE TABLE IF NOT EXISTS companies (
+    id TEXT PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    domain VARCHAR(255) UNIQUE NOT NULL,
+    headquarters VARCHAR(255) DEFAULT 'Bengaluru, India',
+    city VARCHAR(100) DEFAULT 'Bengaluru',
+    tagline TEXT,
+    brand_color VARCHAR(30) DEFAULT '#4f46e5',
+    accent_color VARCHAR(30) DEFAULT '#06b6d4',
+    logo_url TEXT,
+    logo_initials VARCHAR(10) DEFAULT 'CO',
+    cover_banner_url TEXT,
+    status VARCHAR(50) DEFAULT 'Active',
+    plan VARCHAR(100) DEFAULT 'Enterprise Scale Tier',
+    primary_admin VARCHAR(255) NOT NULL,
+    admin_password TEXT DEFAULT 'Company#2026!',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS company_users (
+    id TEXT PRIMARY KEY,
+    company_id TEXT REFERENCES companies(id) ON DELETE CASCADE,
+    name VARCHAR(255) NOT NULL,
+    email VARCHAR(255) NOT NULL,
+    role VARCHAR(100) DEFAULT 'Lead Tech Recruiter',
+    department VARCHAR(100) DEFAULT 'Engineering',
+    status VARCHAR(50) DEFAULT 'Active',
+    last_login VARCHAR(100) DEFAULT 'Just Now'
+);
+
+CREATE TABLE IF NOT EXISTS agencies (
+    id TEXT PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    portal_code VARCHAR(100) UNIQUE NOT NULL,
+    city VARCHAR(100) DEFAULT 'Bengaluru',
+    tier VARCHAR(100) DEFAULT 'Elite Partner',
+    primary_contact VARCHAR(255),
+    email VARCHAR(255) NOT NULL,
+    phone VARCHAR(50),
+    specialization VARCHAR(255) DEFAULT 'Distributed Systems & Cloud',
+    commission_tier VARCHAR(100) DEFAULT '8.33% [1 Month CTC]',
+    status VARCHAR(50) DEFAULT 'active',
+    portal_password TEXT DEFAULT 'Agency#2026!',
+    candidates_submitted INTEGER DEFAULT 0,
+    placements_hired INTEGER DEFAULT 0,
+    bounties_claimed NUMERIC(12, 2) DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS jobs (
+    id TEXT PRIMARY KEY,
+    company_id TEXT REFERENCES companies(id) ON DELETE CASCADE,
+    title VARCHAR(255) NOT NULL,
+    department VARCHAR(100) NOT NULL,
+    location VARCHAR(255) NOT NULL,
+    type VARCHAR(50) DEFAULT 'Full-time',
+    format VARCHAR(50) DEFAULT 'In-Office',
+    experience VARCHAR(50) DEFAULT '3-5 Yrs',
+    education VARCHAR(100) DEFAULT 'B.Tech / B.E.',
+    ctc_range VARCHAR(100) DEFAULT '₹25 - ₹40 LPA',
+    status VARCHAR(50) DEFAULT 'active',
+    bounty VARCHAR(100) DEFAULT '₹1.5 Lakhs',
+    commission_rate VARCHAR(50) DEFAULT '8.5%',
+    agency_dispatched BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS candidates (
+    id TEXT PRIMARY KEY,
+    company_id TEXT REFERENCES companies(id) ON DELETE CASCADE,
+    job_id TEXT REFERENCES jobs(id) ON DELETE CASCADE,
+    name VARCHAR(255) NOT NULL,
+    email VARCHAR(255) NOT NULL,
+    phone VARCHAR(50),
+    current_company VARCHAR(255),
+    experience VARCHAR(50) DEFAULT '0 Yrs',
+    current_ctc VARCHAR(50) DEFAULT '₹0 LPA',
+    expected_ctc VARCHAR(50) DEFAULT '₹0 LPA',
+    notice_period VARCHAR(50) DEFAULT '30 Days',
+    education VARCHAR(100),
+    college VARCHAR(255),
+    skills JSONB DEFAULT '[]'::jsonb,
+    stage VARCHAR(50) DEFAULT 'applied',
+    source VARCHAR(50) DEFAULT 'direct',
+    agency_id TEXT REFERENCES agencies(id) ON DELETE SET NULL,
+    resume_url TEXT,
+    resume_file_name VARCHAR(255),
+    applied_date TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- RESUME STORAGE BUCKET
+INSERT INTO storage.buckets (id, name, public) VALUES ('resumes', 'resumes', true) ON CONFLICT (id) DO NOTHING;
+CREATE POLICY "Public Read Resumes" ON storage.objects FOR SELECT USING (bucket_id = 'resumes');
+CREATE POLICY "Allow Public Resume Uploads" ON storage.objects FOR INSERT WITH CHECK (bucket_id = 'resumes');
+
+-- SEED STARTER TENANTS
+INSERT INTO companies (id, name, domain, headquarters, status, plan, primary_admin, admin_password)
+VALUES 
+('comp-bharat-101', 'BharatScale Cloud', 'bharatscale.in', 'Bengaluru', 'Active', 'Enterprise Scale Tier', 'vikram@bharatscale.in', 'BharatScale#2026!'),
+('comp-zepto-102', 'ZeptoLabs India', 'zeptolabs.in', 'Bengaluru', 'Active', 'Hypergrowth Tier', 'hr@zeptolabs.in', 'Zepto#2026!'),
+('comp-razor-103', 'Razorpay Infra', 'razorinfra.com', 'Bengaluru', 'Active', 'Enterprise Scale Tier', 'talent@razorinfra.com', 'Razor#2026!')
+ON CONFLICT (id) DO NOTHING;`;
+
+                      navigator.clipboard.writeText(sqlContent);
+                      setIsSchemaCopied(true);
+                      setTimeout(() => setIsSchemaCopied(false), 3000);
+                    }}
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 6,
+                      background: isSchemaCopied ? "#059669" : "var(--primary)"
+                    }}
+                  >
+                    {isSchemaCopied ? <CheckCheck size={14} /> : <Copy size={14} />}
+                    <span>{isSchemaCopied ? "Schema SQL Copied!" : "Copy Full schema.sql"}</span>
+                  </button>
+                </div>
+
+                {/* 3 Steps Guide */}
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 12, marginBottom: 16 }}>
+                  <div style={{ padding: "12px 14px", background: "var(--bg-surface-elevated)", borderRadius: "8px", border: "1px solid var(--border-subtle)", fontSize: "0.775rem" }}>
+                    <strong style={{ color: "var(--primary)", display: "block", marginBottom: 3 }}>Step 1: Open SQL Editor</strong>
+                    <span style={{ color: "var(--text-secondary)" }}>
+                      Go to your Supabase project dashboard and click on <strong>SQL Editor</strong> in the left menu.
+                    </span>
+                  </div>
+                  <div style={{ padding: "12px 14px", background: "var(--bg-surface-elevated)", borderRadius: "8px", border: "1px solid var(--border-subtle)", fontSize: "0.775rem" }}>
+                    <strong style={{ color: "var(--primary)", display: "block", marginBottom: 3 }}>Step 2: Paste & Click Run</strong>
+                    <span style={{ color: "var(--text-secondary)" }}>
+                      Click <strong>New Query</strong>, paste the copied SQL schema, and hit <strong>Run</strong> (takes 2 seconds).
+                    </span>
+                  </div>
+                  <div style={{ padding: "12px 14px", background: "var(--bg-surface-elevated)", borderRadius: "8px", border: "1px solid var(--border-subtle)", fontSize: "0.775rem" }}>
+                    <strong style={{ color: "var(--primary)", display: "block", marginBottom: 3 }}>Step 3: Paste Keys Above</strong>
+                    <span style={{ color: "var(--text-secondary)" }}>
+                      Copy your Project URL & Anon Key into the form above and click <strong>Test & Connect Live</strong>!
+                    </span>
+                  </div>
+                </div>
+
+                {/* Schema Code Preview */}
+                <pre
+                  style={{
+                    margin: 0,
+                    padding: 14,
+                    background: "#0f172a",
+                    color: "#38bdf8",
+                    fontFamily: "var(--font-mono)",
+                    fontSize: "0.725rem",
+                    borderRadius: "8px",
+                    overflowX: "auto",
+                    maxHeight: 200,
+                    lineHeight: 1.5
+                  }}
+                >
+{`-- Quick Schema Excerpt:
+CREATE TABLE companies (id TEXT PRIMARY KEY, name VARCHAR(255), domain VARCHAR(255) UNIQUE, ...);
+CREATE TABLE jobs (id TEXT PRIMARY KEY, company_id TEXT REFERENCES companies(id), title VARCHAR(255), ...);
+CREATE TABLE candidates (id TEXT PRIMARY KEY, company_id TEXT REFERENCES companies(id), name VARCHAR(255), ...);
+CREATE TABLE agencies (id TEXT PRIMARY KEY, name VARCHAR(255), portal_code VARCHAR(100) UNIQUE, ...);
+-- Full script with indexes, storage bucket & initial seed is copied with 1 click above!`}
+                </pre>
               </div>
             </div>
           )}
@@ -1704,19 +2493,221 @@ export const SuperAdminPortal = () => {
                   </div>
                 </div>
 
-                <div className="form-group">
-                  <label className="form-label">Initial Cover Banner Preset</label>
-                  <select
-                    className="form-select"
-                    value={newCompanyForm.coverImage}
-                    onChange={(e) => setNewCompanyForm({ ...newCompanyForm, coverImage: e.target.value })}
-                  >
-                    {coverPresets.map((p) => (
-                      <option key={p.id} value={p.url}>
-                        {p.title} ({p.category})
-                      </option>
-                    ))}
-                  </select>
+                {/* Brand Visuals & Media (Cloudinary Upload) */}
+                <div
+                  style={{
+                    background: "var(--bg-surface-elevated)",
+                    padding: "16px 18px",
+                    borderRadius: "12px",
+                    border: "1px solid var(--border-subtle)",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 14
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <Sparkles size={16} color="var(--primary)" />
+                      <span style={{ fontWeight: 800, fontSize: "0.85rem", color: "var(--primary)" }}>
+                        Brand Visual Assets (Direct Cloudinary Upload)
+                      </span>
+                    </div>
+                    <span
+                      style={{
+                        fontSize: "0.68rem",
+                        padding: "3px 8px",
+                        borderRadius: "var(--radius-full)",
+                        background: "rgba(16, 185, 129, 0.12)",
+                        color: "#059669",
+                        fontWeight: 700,
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 4
+                      }}
+                    >
+                      <Cloud size={11} /> Cloudinary CDN
+                    </span>
+                  </div>
+
+                  {/* Company Logo Upload Section */}
+                  <div>
+                    <label className="form-label" style={{ fontSize: "0.775rem", marginBottom: 6 }}>
+                      Company Brand Logo
+                    </label>
+                    <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                      <div
+                        style={{
+                          width: 52,
+                          height: 52,
+                          borderRadius: 12,
+                          border: "1.5px dashed var(--border-subtle)",
+                          background: "var(--bg-surface)",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          overflow: "hidden",
+                          flexShrink: 0
+                        }}
+                      >
+                        {newCompanyForm.logoUrl ? (
+                          <img
+                            src={newCompanyForm.logoUrl}
+                            alt="Logo Preview"
+                            style={{ width: "100%", height: "100%", objectFit: "contain", padding: 4 }}
+                          />
+                        ) : (
+                          <Building2 size={22} color="var(--text-muted)" style={{ opacity: 0.5 }} />
+                        )}
+                      </div>
+
+                      <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 6 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                          <label
+                            className="btn btn-secondary btn-sm"
+                            style={{
+                              cursor: isUploadingCompanyLogo ? "not-allowed" : "pointer",
+                              fontSize: "0.75rem",
+                              padding: "6px 12px",
+                              opacity: isUploadingCompanyLogo ? 0.7 : 1
+                            }}
+                          >
+                            {isUploadingCompanyLogo ? (
+                              <>
+                                <RefreshCw size={13} className="spin" />
+                                <span>Uploading to Cloudinary...</span>
+                              </>
+                            ) : (
+                              <>
+                                <Upload size={13} />
+                                <span>Upload Logo File</span>
+                              </>
+                            )}
+                            <input
+                              type="file"
+                              accept="image/*"
+                              style={{ display: "none" }}
+                              disabled={isUploadingCompanyLogo}
+                              onChange={handleCompanyLogoUpload}
+                            />
+                          </label>
+
+                          {newCompanyForm.logoUrl && (
+                            <button
+                              type="button"
+                              className="btn btn-ghost btn-sm"
+                              style={{ fontSize: "0.72rem", color: "#ef4444", padding: "4px 8px" }}
+                              onClick={() => setNewCompanyForm({ ...newCompanyForm, logoUrl: "" })}
+                            >
+                              <X size={12} /> Remove
+                            </button>
+                          )}
+
+                          {newCompanyForm.logoUrl && (
+                            <span style={{ fontSize: "0.72rem", color: "#10b981", fontWeight: 700, display: "flex", alignItems: "center", gap: 4 }}>
+                              <CheckCircle size={13} /> Cloudinary Saved
+                            </span>
+                          )}
+                        </div>
+                        <div style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}>
+                          Upload SVG, PNG, JPG, or WebP. Automatically stored in Cloudinary cloud storage.
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Company Cover Page / Banner Upload Section */}
+                  <div>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                      <label className="form-label" style={{ fontSize: "0.775rem", margin: 0 }}>
+                        Cover Page Banner (Hero Header)
+                      </label>
+                      <label
+                        className="btn btn-ghost btn-sm"
+                        style={{
+                          cursor: isUploadingCompanyCover ? "not-allowed" : "pointer",
+                          fontSize: "0.72rem",
+                          padding: "2px 8px",
+                          color: "var(--primary)",
+                          fontWeight: 700
+                        }}
+                      >
+                        {isUploadingCompanyCover ? (
+                          <>
+                            <RefreshCw size={12} className="spin" />
+                            <span>Uploading Banner...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Upload size={12} />
+                            <span>Upload Custom Banner</span>
+                          </>
+                        )}
+                        <input
+                          type="file"
+                          accept="image/*"
+                          style={{ display: "none" }}
+                          disabled={isUploadingCompanyCover}
+                          onChange={handleCompanyCoverUpload}
+                        />
+                      </label>
+                    </div>
+
+                    {/* Live Banner Preview */}
+                    {newCompanyForm.coverImage && (
+                      <div
+                        style={{
+                          width: "100%",
+                          height: 80,
+                          borderRadius: 10,
+                          overflow: "hidden",
+                          position: "relative",
+                          marginBottom: 8,
+                          border: "1px solid var(--border-subtle)"
+                        }}
+                      >
+                        <img
+                          src={newCompanyForm.coverImage}
+                          alt="Banner Preview"
+                          style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                        />
+                        <div
+                          style={{
+                            position: "absolute",
+                            bottom: 6,
+                            right: 8,
+                            background: "rgba(0,0,0,0.65)",
+                            backdropFilter: "blur(6px)",
+                            padding: "2px 8px",
+                            borderRadius: "var(--radius-full)",
+                            fontSize: "0.68rem",
+                            color: "#fff",
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 4
+                          }}
+                        >
+                          <Cloud size={10} /> Active Banner
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Presets dropdown */}
+                    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                      <select
+                        className="form-select"
+                        style={{ fontSize: "0.775rem" }}
+                        value={newCompanyForm.coverImage}
+                        onChange={(e) => setNewCompanyForm({ ...newCompanyForm, coverImage: e.target.value })}
+                      >
+                        <option value="">-- Or Select from Curated Presets --</option>
+                        {coverPresets.map((p) => (
+                          <option key={p.id} value={p.url}>
+                            {p.title} ({p.category})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -1742,7 +2733,7 @@ export const SuperAdminPortal = () => {
           <div className="modal-content" style={{ maxWidth: 640 }} onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <UsersRound size={20} color="#db2777" />
+                <UsersRound size={20} color="#4f46e5" />
                 <h3 style={{ fontSize: "1.2rem", fontWeight: 800 }}>Register Placement Agency Partner</h3>
               </div>
               <button className="btn btn-ghost btn-icon" onClick={() => setIsNewAgencyModalOpen(false)}>
@@ -1829,10 +2820,22 @@ export const SuperAdminPortal = () => {
                   }}
                 >
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <Key size={15} color="#db2777" />
-                    <span style={{ fontWeight: 800, fontSize: "0.85rem", color: "#db2777" }}>
+                    <Key size={15} color="#4f46e5" />
+                    <span style={{ fontWeight: 800, fontSize: "0.85rem", color: "#4f46e5" }}>
                       Agency Portal Login Credentials
                     </span>
+                  </div>
+
+                  <div className="form-group" style={{ margin: 0 }}>
+                    <label className="form-label" style={{ fontSize: "0.775rem" }}>Agency Portal ID / Code (Optional - auto-generated if left blank)</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. CAREERNET-TECH-BLR"
+                      className="form-input"
+                      style={{ fontFamily: "var(--font-mono)", fontWeight: 600 }}
+                      value={newAgencyForm.portalCode}
+                      onChange={(e) => setNewAgencyForm({ ...newAgencyForm, portalCode: e.target.value.toUpperCase() })}
+                    />
                   </div>
 
                   <div className="form-row" style={{ margin: 0 }}>
@@ -1898,6 +2901,205 @@ export const SuperAdminPortal = () => {
                     </div>
                   </div>
                 </div>
+
+                {/* Agency Brand & Visual Assets (Direct Cloudinary Upload) */}
+                <div
+                  style={{
+                    background: "var(--bg-surface-elevated)",
+                    padding: "16px 18px",
+                    borderRadius: "12px",
+                    border: "1px solid var(--border-subtle)",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 14
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <Sparkles size={16} color="#4f46e5" />
+                      <span style={{ fontWeight: 800, fontSize: "0.85rem", color: "#4f46e5" }}>
+                        Agency Brand & Visual Assets (Direct Cloudinary Upload)
+                      </span>
+                    </div>
+                    <span
+                      style={{
+                        fontSize: "0.68rem",
+                        padding: "3px 8px",
+                        borderRadius: "var(--radius-full)",
+                        background: "rgba(79, 70, 229, 0.12)",
+                        color: "#4f46e5",
+                        fontWeight: 700,
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 4
+                      }}
+                    >
+                      <Cloud size={11} /> Cloudinary CDN
+                    </span>
+                  </div>
+
+                  {/* Agency Logo */}
+                  <div>
+                    <label className="form-label" style={{ fontSize: "0.775rem", marginBottom: 6 }}>
+                      Agency Brand Logo / Emblem
+                    </label>
+                    <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                      <div
+                        style={{
+                          width: 50,
+                          height: 50,
+                          borderRadius: 12,
+                          border: "1.5px dashed var(--border-subtle)",
+                          background: "var(--bg-surface)",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          overflow: "hidden",
+                          flexShrink: 0
+                        }}
+                      >
+                        {newAgencyForm.logoUrl ? (
+                          <img
+                            src={newAgencyForm.logoUrl}
+                            alt="Agency Logo Preview"
+                            style={{ width: "100%", height: "100%", objectFit: "contain", padding: 4 }}
+                          />
+                        ) : (
+                          <UsersRound size={20} color="var(--text-muted)" style={{ opacity: 0.5 }} />
+                        )}
+                      </div>
+
+                      <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 6 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                          <label
+                            className="btn btn-secondary btn-sm"
+                            style={{
+                              cursor: isUploadingAgencyLogo ? "not-allowed" : "pointer",
+                              fontSize: "0.75rem",
+                              padding: "6px 12px",
+                              opacity: isUploadingAgencyLogo ? 0.7 : 1
+                            }}
+                          >
+                            {isUploadingAgencyLogo ? (
+                              <>
+                                <RefreshCw size={13} className="spin" />
+                                <span>Uploading to Cloudinary...</span>
+                              </>
+                            ) : (
+                              <>
+                                <Upload size={13} />
+                                <span>Upload Logo File</span>
+                              </>
+                            )}
+                            <input
+                              type="file"
+                              accept="image/*"
+                              style={{ display: "none" }}
+                              disabled={isUploadingAgencyLogo}
+                              onChange={handleAgencyLogoUpload}
+                            />
+                          </label>
+
+                          {newAgencyForm.logoUrl && (
+                            <button
+                              type="button"
+                              className="btn btn-ghost btn-sm"
+                              style={{ fontSize: "0.72rem", color: "#ef4444", padding: "4px 8px" }}
+                              onClick={() => setNewAgencyForm({ ...newAgencyForm, logoUrl: "" })}
+                            >
+                              <X size={12} /> Remove
+                            </button>
+                          )}
+
+                          {newAgencyForm.logoUrl && (
+                            <span style={{ fontSize: "0.72rem", color: "#10b981", fontWeight: 700, display: "flex", alignItems: "center", gap: 4 }}>
+                              <CheckCircle size={13} /> Cloudinary Saved
+                            </span>
+                          )}
+                        </div>
+                        <div style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}>
+                          Upload SVG, PNG, JPG, or WebP format.
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Agency Cover Banner */}
+                  <div>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                      <label className="form-label" style={{ fontSize: "0.775rem", margin: 0 }}>
+                        Agency Cover Page Banner
+                      </label>
+                      <label
+                        className="btn btn-ghost btn-sm"
+                        style={{
+                          cursor: isUploadingAgencyCover ? "not-allowed" : "pointer",
+                          fontSize: "0.72rem",
+                          padding: "2px 8px",
+                          color: "#4f46e5",
+                          fontWeight: 700
+                        }}
+                      >
+                        {isUploadingAgencyCover ? (
+                          <>
+                            <RefreshCw size={12} className="spin" />
+                            <span>Uploading Banner...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Upload size={12} />
+                            <span>Upload Custom Banner</span>
+                          </>
+                        )}
+                        <input
+                          type="file"
+                          accept="image/*"
+                          style={{ display: "none" }}
+                          disabled={isUploadingAgencyCover}
+                          onChange={handleAgencyCoverUpload}
+                        />
+                      </label>
+                    </div>
+
+                    {newAgencyForm.coverImage && (
+                      <div
+                        style={{
+                          width: "100%",
+                          height: 72,
+                          borderRadius: 10,
+                          overflow: "hidden",
+                          position: "relative",
+                          marginBottom: 8,
+                          border: "1px solid var(--border-subtle)"
+                        }}
+                      >
+                        <img
+                          src={newAgencyForm.coverImage}
+                          alt="Banner Preview"
+                          style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                        />
+                        <div
+                          style={{
+                            position: "absolute",
+                            bottom: 4,
+                            right: 6,
+                            background: "rgba(0,0,0,0.65)",
+                            backdropFilter: "blur(6px)",
+                            padding: "2px 7px",
+                            borderRadius: "var(--radius-full)",
+                            fontSize: "0.65rem",
+                            color: "#fff",
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 4
+                          }}
+                        >
+                          <Cloud size={10} /> Active Banner
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
 
               <div className="modal-footer">
@@ -1907,7 +3109,7 @@ export const SuperAdminPortal = () => {
                 <button
                   type="submit"
                   className="btn btn-primary"
-                  style={{ background: "linear-gradient(135deg, #db2777 0%, #8b5cf6 100%)", border: "none" }}
+                  style={{ background: "#4f46e5", border: "none" }}
                 >
                   <PlusCircle size={15} />
                   <span>Register Agency & Activate Access</span>
@@ -1938,8 +3140,28 @@ export const SuperAdminPortal = () => {
 
             <form onSubmit={handleSaveCredentials}>
               <div className="modal-body" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                {credentialTarget.type === "agency" && (
+                  <div className="form-group">
+                    <label className="form-label" style={{ fontWeight: 700 }}>Agency Portal ID / Code</label>
+                    <input
+                      type="text"
+                      required
+                      className="form-input"
+                      style={{ fontFamily: "var(--font-mono)", fontWeight: 700, letterSpacing: "0.03em" }}
+                      value={credentialForm.portalCode || ""}
+                      onChange={(e) => setCredentialForm({ ...credentialForm, portalCode: e.target.value.toUpperCase() })}
+                      placeholder="e.g. SNAB-PARTNER-01"
+                    />
+                    <span style={{ fontSize: "0.725rem", color: "var(--text-muted)", marginTop: 4, display: "block" }}>
+                      Agencies can sign in to their portal using this Portal ID or their Email ID.
+                    </span>
+                  </div>
+                )}
+
                 <div className="form-group">
-                  <label className="form-label">Login Email ID</label>
+                  <label className="form-label">
+                    {credentialTarget.type === "company" ? "Company Admin Login Email" : "Agency Contact Email ID"}
+                  </label>
                   <input
                     type="email"
                     required
@@ -2123,6 +3345,283 @@ export const SuperAdminPortal = () => {
       )}
 
       {/* ========================================================================= */}
+      {/* MODAL: CONFIRM REVOKE USER ACCESS */}
+      {/* ========================================================================= */}
+      {userToRevoke && (
+        <div className="modal-overlay" onClick={() => setUserToRevoke(null)}>
+          <div className="modal-content" style={{ maxWidth: 440 }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <div
+                  style={{
+                    width: 32,
+                    height: 32,
+                    borderRadius: "8px",
+                    background: "rgba(220, 38, 38, 0.1)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    color: "#dc2626"
+                  }}
+                >
+                  <AlertTriangle size={17} />
+                </div>
+                <h3 style={{ fontSize: "1.1rem", fontWeight: 800, margin: 0 }}>
+                  Revoke User Access
+                </h3>
+              </div>
+              <button
+                type="button"
+                className="btn btn-ghost btn-icon"
+                onClick={() => setUserToRevoke(null)}
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="modal-body" style={{ padding: "20px 24px" }}>
+              <p style={{ fontSize: "0.875rem", color: "var(--text-primary)", margin: "0 0 10px", lineHeight: 1.5 }}>
+                Are you sure you want to revoke login access for <strong>{userToRevoke.name}</strong>?
+              </p>
+              <p style={{ fontSize: "0.8rem", color: "var(--text-secondary)", margin: 0, lineHeight: 1.5 }}>
+                This user will immediately be disabled and will not be able to log in to the workspace with <strong>{userToRevoke.email}</strong>.
+              </p>
+            </div>
+
+            <div className="modal-footer" style={{ padding: "14px 24px", display: "flex", justifyContent: "flex-end", gap: 10 }}>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => setUserToRevoke(null)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                style={{ background: "#dc2626", border: "none" }}
+                onClick={() => {
+                  const userName = userToRevoke.name;
+                  removeCompanyUser(userToRevoke.id);
+                  setUserToRevoke(null);
+                  setRevokeFeedback(`Access for ${userName} has been successfully revoked.`);
+                  setTimeout(() => setRevokeFeedback(null), 4000);
+                }}
+              >
+                <Trash2 size={14} />
+                <span>Revoke Access</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL: CONFIRM DELETE EMPLOYER ATS TENANT */}
+      {/* ========================================================================= */}
+      {companyToDelete && (
+        <div className="modal-overlay" onClick={() => setCompanyToDelete(null)}>
+          <div className="modal-content" style={{ maxWidth: 460 }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <div
+                  style={{
+                    width: 34,
+                    height: 34,
+                    borderRadius: "8px",
+                    background: "rgba(220, 38, 38, 0.1)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    color: "#dc2626"
+                  }}
+                >
+                  <AlertTriangle size={18} />
+                </div>
+                <div>
+                  <h3 style={{ fontSize: "1.1rem", fontWeight: 800, margin: 0 }}>
+                    Delete Employer ATS Tenant
+                  </h3>
+                  <span style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>
+                    Tenant ID: {companyToDelete.id}
+                  </span>
+                </div>
+              </div>
+              <button
+                type="button"
+                className="btn btn-ghost btn-icon"
+                onClick={() => setCompanyToDelete(null)}
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="modal-body" style={{ padding: "20px 24px" }}>
+              <div
+                style={{
+                  padding: "12px 14px",
+                  background: "var(--bg-surface-elevated)",
+                  borderRadius: 8,
+                  border: "1px solid var(--border-subtle)",
+                  marginBottom: 16,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 12
+                }}
+              >
+                <div
+                  className="company-logo-avatar"
+                  style={{
+                    width: 36,
+                    height: 36,
+                    fontSize: "0.85rem",
+                    background: companyToDelete.brandColor || "#4f46e5"
+                  }}
+                >
+                  {companyToDelete.logoInitials || "CO"}
+                </div>
+                <div>
+                  <div style={{ fontWeight: 800, fontSize: "0.95rem" }}>{companyToDelete.name}</div>
+                  <div style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
+                    {companyToDelete.domain} &bull; Admin: {companyToDelete.primaryAdmin}
+                  </div>
+                </div>
+              </div>
+
+              <p style={{ fontSize: "0.875rem", color: "var(--text-primary)", margin: "0 0 10px", lineHeight: 1.5 }}>
+                Are you sure you want to permanently delete <strong>{companyToDelete.name}</strong>?
+              </p>
+              <p style={{ fontSize: "0.8rem", color: "#dc2626", margin: 0, lineHeight: 1.5 }}>
+                Warning: All active job requisitions, candidate pipeline records, interview schedules, and team member logins for this tenant will be permanently deleted.
+              </p>
+            </div>
+
+            <div className="modal-footer" style={{ padding: "14px 24px", display: "flex", justifyContent: "flex-end", gap: 10 }}>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => setCompanyToDelete(null)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                style={{ background: "#dc2626", border: "none" }}
+                onClick={handleConfirmDeleteCompany}
+              >
+                <Trash2 size={14} />
+                <span>Delete Tenant Permanently</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL: CONFIRM DELETE PLACEMENT AGENCY */}
+      {/* ========================================================================= */}
+      {agencyToDelete && (
+        <div className="modal-overlay" onClick={() => setAgencyToDelete(null)}>
+          <div className="modal-content" style={{ maxWidth: 460 }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <div
+                  style={{
+                    width: 34,
+                    height: 34,
+                    borderRadius: "8px",
+                    background: "rgba(220, 38, 38, 0.1)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    color: "#dc2626"
+                  }}
+                >
+                  <AlertTriangle size={18} />
+                </div>
+                <div>
+                  <h3 style={{ fontSize: "1.1rem", fontWeight: 800, margin: 0 }}>
+                    Delete Placement Agency
+                  </h3>
+                  <span style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>
+                    Portal ID: {agencyToDelete.portalCode || agencyToDelete.id}
+                  </span>
+                </div>
+              </div>
+              <button
+                type="button"
+                className="btn btn-ghost btn-icon"
+                onClick={() => setAgencyToDelete(null)}
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="modal-body" style={{ padding: "20px 24px" }}>
+              <div
+                style={{
+                  padding: "12px 14px",
+                  background: "var(--bg-surface-elevated)",
+                  borderRadius: 8,
+                  border: "1px solid var(--border-subtle)",
+                  marginBottom: 16,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 12
+                }}
+              >
+                <div
+                  className="company-logo-avatar"
+                  style={{
+                    width: 36,
+                    height: 36,
+                    fontSize: "0.85rem",
+                    background: "rgba(124, 58, 237, 0.1)",
+                    color: "#7c3aed"
+                  }}
+                >
+                  {agencyToDelete.name.split(" ").map((w) => w[0]).join("").slice(0, 2)}
+                </div>
+                <div>
+                  <div style={{ fontWeight: 800, fontSize: "0.95rem" }}>{agencyToDelete.name}</div>
+                  <div style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
+                    {agencyToDelete.email} &bull; Contact: {agencyToDelete.primaryContact}
+                  </div>
+                </div>
+              </div>
+
+              <p style={{ fontSize: "0.875rem", color: "var(--text-primary)", margin: "0 0 10px", lineHeight: 1.5 }}>
+                Are you sure you want to permanently delete <strong>{agencyToDelete.name}</strong>?
+              </p>
+              <p style={{ fontSize: "0.8rem", color: "#dc2626", margin: 0, lineHeight: 1.5 }}>
+                Warning: The agency portal code ({agencyToDelete.portalCode || agencyToDelete.id}) will be deactivated immediately and their partner account removed from all tenant job syndications.
+              </p>
+            </div>
+
+            <div className="modal-footer" style={{ padding: "14px 24px", display: "flex", justifyContent: "flex-end", gap: 10 }}>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => setAgencyToDelete(null)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                style={{ background: "#dc2626", border: "none" }}
+                onClick={handleConfirmDeleteAgency}
+              >
+                <Trash2 size={14} />
+                <span>Delete Agency Permanently</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
       {/* MODAL 5: CUSTOMIZE COMPANY BRANDING & LOGO */}
       {/* ========================================================================= */}
       {isBrandingModalOpen && selectedCompanyForBranding && (
@@ -2164,14 +3663,43 @@ export const SuperAdminPortal = () => {
                 </div>
 
                 <div className="form-group">
-                  <label className="form-label">SVG / Image Logo URL</label>
-                  <input
-                    type="text"
-                    className="form-input"
-                    placeholder="data:image/svg+xml... or https://..."
-                    value={brandingForm.logoUrl}
-                    onChange={(e) => setBrandingForm({ ...brandingForm, logoUrl: e.target.value })}
-                  />
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                    <label className="form-label" style={{ margin: 0 }}>SVG / Image Logo (Direct Upload / URL)</label>
+                    <label
+                      className="btn btn-ghost btn-sm"
+                      style={{
+                        cursor: isUploadingBrandingLogo ? "not-allowed" : "pointer",
+                        fontSize: "0.72rem",
+                        padding: "2px 8px",
+                        color: "var(--primary)",
+                        fontWeight: 700
+                      }}
+                    >
+                      {isUploadingBrandingLogo ? <RefreshCw size={12} className="spin" /> : <Upload size={12} />}
+                      <span>{isUploadingBrandingLogo ? "Uploading..." : "Upload to Cloudinary"}</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        style={{ display: "none" }}
+                        disabled={isUploadingBrandingLogo}
+                        onChange={handleBrandingLogoUpload}
+                      />
+                    </label>
+                  </div>
+                  <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                    {brandingForm.logoUrl && (
+                      <div style={{ width: 38, height: 38, borderRadius: 8, overflow: "hidden", border: "1px solid var(--border-subtle)", flexShrink: 0, padding: 2 }}>
+                        <img src={brandingForm.logoUrl} alt="Logo" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
+                      </div>
+                    )}
+                    <input
+                      type="text"
+                      className="form-input"
+                      placeholder="data:image/svg+xml... or https://res.cloudinary.com/..."
+                      value={brandingForm.logoUrl}
+                      onChange={(e) => setBrandingForm({ ...brandingForm, logoUrl: e.target.value })}
+                    />
+                  </div>
                 </div>
 
                 <div className="form-row">
@@ -2213,12 +3741,40 @@ export const SuperAdminPortal = () => {
                 </div>
 
                 <div className="form-group">
-                  <label className="form-label">Cover Banner Preset</label>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                    <label className="form-label" style={{ margin: 0 }}>Cover Banner (Upload or Presets)</label>
+                    <label
+                      className="btn btn-ghost btn-sm"
+                      style={{
+                        cursor: isUploadingBrandingCover ? "not-allowed" : "pointer",
+                        fontSize: "0.72rem",
+                        padding: "2px 8px",
+                        color: "var(--primary)",
+                        fontWeight: 700
+                      }}
+                    >
+                      {isUploadingBrandingCover ? <RefreshCw size={12} className="spin" /> : <Upload size={12} />}
+                      <span>{isUploadingBrandingCover ? "Uploading..." : "Upload to Cloudinary"}</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        style={{ display: "none" }}
+                        disabled={isUploadingBrandingCover}
+                        onChange={handleBrandingCoverUpload}
+                      />
+                    </label>
+                  </div>
+                  {brandingForm.coverImage && (
+                    <div style={{ width: "100%", height: 64, borderRadius: 8, overflow: "hidden", marginBottom: 6, border: "1px solid var(--border-subtle)" }}>
+                      <img src={brandingForm.coverImage} alt="Cover" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                    </div>
+                  )}
                   <select
                     className="form-select"
                     value={brandingForm.coverImage}
                     onChange={(e) => setBrandingForm({ ...brandingForm, coverImage: e.target.value })}
                   >
+                    <option value="">-- Choose from Curated Presets --</option>
                     {coverPresets.map((p) => (
                       <option key={p.id} value={p.url}>
                         {p.title}

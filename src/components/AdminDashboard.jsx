@@ -170,7 +170,7 @@ export const AdminDashboard = () => {
               <div>
                 <h3 style={{ fontSize: "1.05rem" }}>Candidate Sourcing Attribution</h3>
                 <p style={{ fontSize: "0.825rem", color: "var(--text-secondary)" }}>
-                  Tracking direct website applicants vs recruitment consultancies (Naukri Elite, ABC, SutraHR) & referrals
+                  Tracking direct website applicants vs authorized recruitment consultancies &amp; referrals
                 </p>
               </div>
               <button className="btn btn-ghost btn-sm" onClick={() => setAdminTab("agencies")}>
@@ -203,7 +203,7 @@ export const AdminDashboard = () => {
                 <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <span className="badge badge-source-agency">Recruitment Consultancies</span>
                   <span style={{ color: "var(--text-muted)", fontSize: "0.78rem" }}>
-                    Naukri Elite, ABC Consultants, SutraHR
+                    Authorized Agency Partners
                   </span>
                 </span>
                 <span style={{ fontWeight: 700 }}>
@@ -400,7 +400,7 @@ export const AdminDashboard = () => {
             </div>
 
             <p style={{ fontSize: "0.825rem", color: "var(--text-secondary)", marginBottom: 14 }}>
-              These roles are actively dispatched to external consultancies (Naukri Elite, ABC, SutraHR) with automated candidate injection:
+              These roles are actively dispatched to authorized recruitment partners with automated candidate injection:
             </p>
 
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
